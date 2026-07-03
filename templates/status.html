@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="../assets/favicon.ico" sizes="any" />
+  <link rel="icon" href="../assets/favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="../assets/favicon.png" />
+  <title>AboveDeck — System Status</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            viridis: {
+              900: '#440154',
+              800: '#482878',
+              700: '#3e4989',
+              600: '#31688e',
+              500: '#26828e',
+              400: '#1f9e89',
+              300: '#35b779',
+              200: '#6ece58',
+              100: '#b5de2b',
+              50: '#fde725',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .status-card { transition: box-shadow 0.15s, border-color 0.15s; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .loading-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen bg-[#f3f6f4] text-slate-800">
+  <header class="sticky top-0 z-30 border-b border-viridis-600/15 bg-white/95 backdrop-blur">
+    <div class="flex items-center gap-4 px-5 py-3 lg:px-6">
+      <a href="../index.html" class="flex items-center gap-2.5 font-bold text-viridis-900">
+        <img src="../assets/favicon.png" alt="" class="h-8 w-8 rounded-lg shadow-sm" width="32" height="32" />
+        AboveDeck
+      </a>
+      <a href="../index.html" class="ml-auto rounded-lg border border-viridis-600/20 px-3 py-1.5 text-sm font-medium text-viridis-700 hover:bg-viridis-900/5">← Home</a>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-5 py-8 lg:px-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-viridis-900 sm:text-3xl">System Status</h1>
+        <p class="mt-1 text-sm text-slate-500">Infrastructure monitor</p>
+      </div>
+      <button id="refresh-btn" type="button" class="rounded-lg bg-viridis-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-viridis-700 disabled:opacity-60">
+        Refresh
+      </button>
+    </div>
+
+    <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <article id="widget-static" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">Static Site</h2>
+          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Checking…</span>
+        </div>
+        <p data-detail class="mt-3 text-sm text-slate-600">Render static hosting</p>
+        <p data-meta class="mt-4 text-[11px] text-slate-400">Last checked —</p>
+      </article>
+
+      <article id="widget-api" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">API Web Service</h2>
+          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Checking…</span>
+        </div>
+        <p data-detail class="mt-3 text-sm text-slate-600">FastAPI on Render</p>
+        <p data-meta class="mt-4 text-[11px] text-slate-400">Last checked —</p>
+      </article>
+
+      <article id="widget-postgres" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">Postgres</h2>
+          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Waiting…</span>
+        </div>
+        <p data-detail class="mt-3 text-sm text-slate-600">Neon database</p>
+        <p data-meta class="mt-4 text-[11px] text-slate-400">Connectivity check coming later</p>
+      </article>
+
+      <article id="widget-pipeline" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm opacity-90">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">Nightly Pipeline</h2>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Not deployed</span>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">GitHub Actions cron — weather ingest and scoring</p>
+        <p class="mt-4 text-[11px] text-slate-400">Placeholder</p>
+      </article>
+
+      <article id="widget-weather" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm opacity-90">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">Weather Ingest</h2>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Not deployed</span>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">Open-Meteo / NOAA forecast fetch</p>
+        <p class="mt-4 text-[11px] text-slate-400">Placeholder</p>
+      </article>
+    </div>
+  </main>
+
+  <script src="../assets/config.js"></script>
+  <script>
+    const PILL = {
+      online: 'rounded-full bg-viridis-100 px-2.5 py-0.5 text-xs font-medium text-viridis-800',
+      offline: 'rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700',
+      warning: 'rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800',
+      loading: 'rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 loading-dot',
+    };
+
+    function setWidget(id, { label, pillClass, detail, meta }) {
+      const el = document.getElementById(id);
+      const pill = el.querySelector('[data-status-pill]');
+      const detailEl = el.querySelector('[data-detail]');
+      const metaEl = el.querySelector('[data-meta]');
+      if (pill) {
+        pill.className = pillClass;
+        pill.textContent = label;
+      }
+      if (detailEl && detail) detailEl.textContent = detail;
+      if (metaEl && meta) metaEl.textContent = meta;
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    }
+
+    function checkStatic() {
+      const now = new Date();
+      const url = window.location.origin + '/index.html';
+      setWidget('widget-static', {
+        label: 'Online',
+        pillClass: PILL.online,
+        detail: `Serving from ${window.location.host}`,
+        meta: `Last checked ${formatTime(now)}`,
+      });
+      return { ok: true };
+    }
+
+    async function checkApi() {
+      const apiBase = window.ABOVEDECK_CONFIG?.apiBaseUrl;
+      if (!apiBase) {
+        setWidget('widget-api', {
+          label: 'Error',
+          pillClass: PILL.offline,
+          detail: 'Missing apiBaseUrl in assets/config.js',
+          meta: 'Last checked —',
+        });
+        return { ok: false };
+      }
+
+      setWidget('widget-api', {
+        label: 'Checking…',
+        pillClass: PILL.loading,
+        detail: `Fetching ${apiBase}/health`,
+        meta: 'Last checked —',
+      });
+
+      const start = performance.now();
+      try {
+        const res = await fetch(`${apiBase}/health`, { method: 'GET' });
+        const latency = Math.round(performance.now() - start);
+        const now = new Date();
+
+        if (!res.ok) {
+          setWidget('widget-api', {
+            label: 'Error',
+            pillClass: PILL.offline,
+            detail: `HTTP ${res.status} from /health`,
+            meta: `Last checked ${formatTime(now)} · ${latency} ms`,
+          });
+          return { ok: false };
+        }
+
+        const data = await res.json();
+        setWidget('widget-api', {
+          label: 'Online',
+          pillClass: PILL.online,
+          detail: `status: ${data.status} · database: ${data.database} · ${latency} ms`,
+          meta: `Last checked ${formatTime(now)}`,
+        });
+        return { ok: true, data };
+      } catch (err) {
+        const latency = Math.round(performance.now() - start);
+        const now = new Date();
+        const msg = err.message || 'Request failed';
+        const hint = msg.includes('Failed to fetch')
+          ? `${msg} — check CORS_ORIGINS on the API or if the service is waking up`
+          : msg;
+        setWidget('widget-api', {
+          label: 'Offline',
+          pillClass: PILL.offline,
+          detail: hint,
+          meta: `Last checked ${formatTime(now)} · ${latency} ms`,
+        });
+        return { ok: false };
+      }
+    }
+
+    function updatePostgres(apiResult) {
+      const now = new Date();
+      if (!apiResult?.ok || !apiResult.data) {
+        setWidget('widget-postgres', {
+          label: 'Unknown',
+          pillClass: PILL.warning,
+          detail: 'Waiting for API health check',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+        return;
+      }
+
+      const db = apiResult.data.database;
+      if (db === 'configured') {
+        setWidget('widget-postgres', {
+          label: 'Configured',
+          pillClass: PILL.online,
+          detail: 'DATABASE_URL is set — connectivity check coming later',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+      } else {
+        setWidget('widget-postgres', {
+          label: 'Not configured',
+          pillClass: PILL.warning,
+          detail: 'DATABASE_URL not set on Render yet',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+      }
+    }
+
+    async function refreshAll() {
+      const btn = document.getElementById('refresh-btn');
+      btn.disabled = true;
+
+      setWidget('widget-postgres', {
+        label: 'Checking…',
+        pillClass: PILL.loading,
+        detail: 'Neon database',
+        meta: 'Last checked —',
+      });
+
+      checkStatic();
+      const apiResult = await checkApi();
+      updatePostgres(apiResult);
+
+      btn.disabled = false;
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+    refreshAll();
+    setInterval(refreshAll, 60000);
+  </script>
+</body>
+</html>
