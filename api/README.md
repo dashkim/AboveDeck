@@ -21,7 +21,7 @@ uvicorn main:app --reload --port 8000
 | Root Directory | `api` |
 | Runtime | Python 3 |
 | Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| Start Command | `python3 -m uvicorn main:app --host 0.0.0.0 --port $PORT` |
 | Health Check Path | `/health` |
 
 ### Environment variables
