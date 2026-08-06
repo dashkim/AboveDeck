@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS smoke_phrases (
+  id BIGSERIAL PRIMARY KEY,
+  phrase TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

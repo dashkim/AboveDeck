@@ -1,36 +1,133 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from geoalchemy2 import functions as gf
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import Settings
+from db import get_session
 from dependencies import require_db
-from schemas.peaks import PeakDetail, PeakListResponse, PeakSearchResponse
+from models.peaks import Peak
+from schemas.peaks import (
+    PeakDetail,
+    PeakListResponse,
+    PeakSearchResponse,
+    PeakSearchResult,
+    PeakSummary,
+)
 
 router = APIRouter(prefix="/peaks", tags=["peaks"])
 
 
+def parse_bbox(bbox: str) -> tuple[float, float, float, float]:
+    parts = [float(value.strip()) for value in bbox.split(",")]
+    if len(parts) != 4:
+        raise HTTPException(status_code=422, detail="bbox must be west,south,east,north")
+    west, south, east, north = parts
+    if west >= east or south >= north:
+        raise HTTPException(status_code=422, detail="bbox bounds are invalid")
+    return west, south, east, north
+
+
+def placeholder_summary(
+    peak_id: int,
+    name: str,
+    lat: float,
+    lon: float,
+    elevation_m: int | None,
+    state: str,
+) -> PeakSummary:
+    return PeakSummary(
+        id=peak_id,
+        name=name,
+        lat=lat,
+        lon=lon,
+        elevation_m=elevation_m or 0,
+        prominence_m=None,
+        state=state,
+        above_cloud_prob=0.0,
+        inversion_strength="none",
+        confidence="low",
+        best_window_start=None,
+        best_window_end=None,
+    )
+
+
 @router.get("", response_model=PeakListResponse)
-def list_peaks(
+async def list_peaks(
     bbox: str = Query(..., description="west,south,east,north"),
     date: date = Query(..., description="ISO date for predictions"),
     hour: int | None = Query(None, ge=0, le=23, description="Optional hour (0-23)"),
-    _settings: Settings = Depends(require_db),
+    _settings=Depends(require_db),
+    session: AsyncSession = Depends(get_session),
 ) -> PeakListResponse:
-    raise NotImplementedError("Peaks query not implemented yet.")
+    west, south, east, north = parse_bbox(bbox)
+    envelope = gf.ST_MakeEnvelope(west, south, east, north, 4326)
+    stmt = (
+        select(
+            Peak.id,
+            Peak.name,
+            func.ST_Y(Peak.geom).label("lat"),
+            func.ST_X(Peak.geom).label("lon"),
+            Peak.elevation_m,
+            Peak.state,
+        )
+        .where(Peak.geom.ST_Intersects(envelope))
+        .order_by(Peak.elevation_m.desc().nulls_last(), Peak.name)
+        .limit(200)
+    )
+    result = await session.execute(stmt)
+    peaks = [
+        placeholder_summary(row.id, row.name, row.lat, row.lon, row.elevation_m, row.state)
+        for row in result.all()
+    ]
+    return PeakListResponse(peaks=peaks, date=date, bbox=(west, south, east, north))
 
 
 @router.get("/search", response_model=PeakSearchResponse)
-def search_peaks(
+async def search_peaks(
     q: str = Query(..., min_length=1, description="Peak name search query"),
-    _settings: Settings = Depends(require_db),
+    _settings=Depends(require_db),
+    session: AsyncSession = Depends(get_session),
 ) -> PeakSearchResponse:
-    raise NotImplementedError("Peak search not implemented yet.")
+    stmt = (
+        select(Peak.id, Peak.name, Peak.state, Peak.elevation_m)
+        .where(Peak.name.ilike(f"%{q}%"))
+        .order_by(func.similarity(Peak.name, q).desc(), Peak.elevation_m.desc().nulls_last())
+        .limit(20)
+    )
+    result = await session.execute(stmt)
+    results = [
+        PeakSearchResult(
+            id=row.id,
+            name=row.name,
+            state=row.state,
+            elevation_m=row.elevation_m or 0,
+        )
+        for row in result.all()
+    ]
+    return PeakSearchResponse(results=results, query=q)
 
 
 @router.get("/{peak_id}", response_model=PeakDetail)
-def get_peak(
+async def get_peak(
     peak_id: int,
     date: date = Query(..., description="ISO date for predictions"),
-    _settings: Settings = Depends(require_db),
+    _settings=Depends(require_db),
+    session: AsyncSession = Depends(get_session),
 ) -> PeakDetail:
-    raise NotImplementedError("Peak detail not implemented yet.")
+    stmt = select(
+        Peak.id,
+        Peak.name,
+        func.ST_Y(Peak.geom).label("lat"),
+        func.ST_X(Peak.geom).label("lon"),
+        Peak.elevation_m,
+        Peak.state,
+    ).where(Peak.id == peak_id)
+    result = await session.execute(stmt)
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Peak not found")
+
+    summary = placeholder_summary(row.id, row.name, row.lat, row.lon, row.elevation_m, row.state)
+    return PeakDetail(**summary.model_dump(), hourly=[])

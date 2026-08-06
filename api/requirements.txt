@@ -1,3 +1,6 @@
 fastapi==0.139.0
 uvicorn[standard]==0.49.0
 pydantic-settings==2.14.2
+sqlalchemy[asyncio]==2.0.41
+asyncpg==0.30.0
+geoalchemy2==0.17.1

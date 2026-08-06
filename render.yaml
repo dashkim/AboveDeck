@@ -9,3 +9,5 @@ services:
     envVars:
       - key: CORS_ORIGINS
         value: https://dashkim.github.io
+      - key: DATABASE_URL
+        sync: false

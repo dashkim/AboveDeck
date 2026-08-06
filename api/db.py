@@ -1,17 +1,41 @@
-"""Database access layer (Neon Postgres + PostGIS).
-
-When Neon is wired up:
-  1. Add sqlalchemy[asyncio] and asyncpg to requirements.txt
-  2. Create an async engine from DATABASE_URL
-  3. Implement get_session() for route handlers
-  4. PostGIS bbox queries for peaks live here (see planning/OVERARCHING_PLAN.md)
-"""
+"""Database access layer (Neon Postgres + PostGIS)."""
 
 from collections.abc import AsyncIterator
-from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+
+from config import get_settings
 
 
-async def get_session() -> AsyncIterator[Any]:
-    """Yield a database session once Neon is configured."""
-    raise NotImplementedError("Database session is not implemented yet.")
-    yield  # pragma: no cover
+class Base(DeclarativeBase):
+    pass
+
+
+def _async_database_url(url: str) -> str:
+    if url.startswith("postgresql+asyncpg://"):
+        return url
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
+settings = get_settings()
+engine = None
+SessionLocal: async_sessionmaker[AsyncSession] | None = None
+
+if settings.database_url:
+    engine = create_async_engine(
+        _async_database_url(settings.database_url),
+        pool_pre_ping=True,
+    )
+    SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    if SessionLocal is None:
+        raise RuntimeError("Database session is not configured. Set DATABASE_URL.")
+    async with SessionLocal() as session:
+        yield session

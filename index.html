@@ -57,7 +57,7 @@
       </div>
       <div class="ml-2 flex flex-1 items-center gap-2 rounded-xl border border-viridis-600/15 bg-viridis-900/[0.03] px-3 py-2 sm:max-w-md">
         <svg class="h-4 w-4 text-viridis-600/60" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
-        <input placeholder="Search hikes…" class="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
+        <input id="search-input" placeholder="Search peaks…" class="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
       </div>
       <a href="templates/status.html" class="ml-auto hidden rounded-lg border border-viridis-600/20 px-3 py-1.5 text-sm font-medium text-viridis-700 hover:bg-viridis-900/5 sm:block">Monitor Status</a>
     </div>
@@ -69,102 +69,17 @@
       <div class="shrink-0 px-5 py-5 lg:px-6">
         <h1 class="text-2xl font-bold tracking-tight text-viridis-900 sm:text-3xl">Where to get above the clouds</h1>
         <p class="mt-1 text-sm text-slate-500">Oregon &amp; Washington · ranked by above-cloud probability</p>
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button class="rounded-full bg-viridis-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm">Sat</button>
-          <button class="rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">Sun</button>
-          <button class="rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">Mon</button>
-          <button class="rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">Tue</button>
-          <button class="rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">Wed</button>
+        <div id="day-pills" class="mt-4 flex flex-wrap items-center gap-2">
+          <button type="button" data-day-offset="0" class="day-pill rounded-full bg-viridis-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm">Today</button>
+          <button type="button" data-day-offset="1" class="day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">+1</button>
+          <button type="button" data-day-offset="2" class="day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">+2</button>
+          <button type="button" data-day-offset="3" class="day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">+3</button>
+          <button type="button" id="refresh-area" class="ml-auto rounded-full border border-viridis-600/25 bg-white px-4 py-1.5 text-sm font-medium text-viridis-700 hover:bg-viridis-900/5">Refresh this area</button>
         </div>
       </div>
 
-      <div class="flex-1 space-y-3 overflow-y-auto px-5 pb-6 lg:px-6">
-      <article data-hike="mcneil" class="rank-card overflow-hidden rounded-2xl border border-viridis-300/30 bg-white shadow-sm">
-        <div class="flex flex-col sm:flex-row">
-          <div class="relative h-24 w-full bg-gradient-to-br from-viridis-800 to-viridis-400 sm:h-auto sm:w-36">
-            <span class="absolute left-3 top-3 rounded-full bg-viridis-50 px-2 py-0.5 text-xs font-bold text-viridis-900">#1 · Excellent</span>
-          </div>
-          <div class="flex-1 p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h3 class="text-lg font-bold text-viridis-900">McNeil Point</h3>
-                <p class="text-sm text-slate-500">Mt Hood Wilderness · 6,100 ft · 9.2 mi RT</p>
-              </div>
-              <div class="text-right shrink-0"><p class="text-3xl font-extrabold text-viridis-500">99%</p><p class="text-[11px] text-slate-400">above cloud</p></div>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2 text-xs">
-              <span class="rounded-lg bg-viridis-50/30 px-2 py-1 font-medium text-viridis-800 ring-1 ring-viridis-100">Peak cloud sea 7:00 AM</span>
-              <span class="rounded-lg bg-viridis-900/5 px-2 py-1 text-slate-600">Best 6:10–8:30 AM</span>
-              <span class="rounded-lg bg-viridis-900/5 px-2 py-1 text-slate-600">Confidence: High</span>
-            </div>
-            <div class="mt-3 flex items-end gap-1" style="height:32px">
-              <div class="w-2.5 rounded-t bg-viridis-700" style="height:55%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-600" style="height:72%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-300" style="height:90%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-50" style="height:99%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-100" style="height:95%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-400" style="height:78%"></div>
-              <div class="w-2.5 rounded-t bg-viridis-600" style="height:50%"></div>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <div class="space-y-3">
-        <article data-hike="tdh" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-300/20 font-bold text-viridis-500">2</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">Tom Dick &amp; Harry Mountain</h3>
-            <p class="text-xs text-slate-500">Mt Hood, OR · Strong inversion 6:30 AM</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-300">88%</p></div>
-        </article>
-
-        <article data-hike="ellinor" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-300/20 font-bold text-viridis-500">3</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">Mount Ellinor</h3>
-            <p class="text-xs text-slate-500">Olympics Wilderness, WA · 6:45 AM</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-300">79%</p></div>
-        </article>
-
-        <article data-hike="highrock" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-400/20 font-bold text-viridis-500">4</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">High Rock Lookout</h3>
-            <p class="text-xs text-slate-500">Mt Baker-Snoqualmie, WA · 7:00 AM</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-400">74%</p></div>
-        </article>
-
-        <article data-hike="larch" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-600/15 font-bold text-viridis-600">5</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">Larch Mountain</h3>
-            <p class="text-xs text-slate-500">Columbia Gorge, OR · Possible inversion</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-600">61%</p></div>
-        </article>
-
-        <article data-hike="saddle" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-600/15 font-bold text-viridis-600">6</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">Saddle Mountain</h3>
-            <p class="text-xs text-slate-500">Clatsop State Forest, OR · Possible</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-600">54%</p></div>
-        </article>
-
-        <article data-hike="dog" class="rank-card flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 opacity-80 shadow-sm">
-          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-viridis-900/10 font-bold text-viridis-900">7</span>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-viridis-900 truncate">Dog Mountain</h3>
-            <p class="text-xs text-slate-500">Columbia Gorge, WA · Below cloud deck</p>
-          </div>
-          <div class="text-right shrink-0"><p class="text-2xl font-bold text-viridis-900">12%</p></div>
-        </article>
-      </div>
+      <div id="peak-list" class="flex-1 space-y-3 overflow-y-auto px-5 pb-6 lg:px-6">
+        <p id="peak-list-status" class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">Loading peaks in view…</p>
       </div>
     </section>
 
@@ -189,17 +104,192 @@
     </section>
   </main>
 
+  <script src="assets/config.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
-    const hikes = {
-      mcneil:   { name: 'McNeil Point', lng: -121.735, lat: 45.382, pct: 99, color: '#fde725' },
-      tdh:      { name: 'Tom Dick & Harry', lng: -121.755, lat: 45.368, pct: 88, color: '#35b779' },
-      ellinor:  { name: 'Mount Ellinor', lng: -123.258, lat: 47.521, pct: 79, color: '#35b779' },
-      highrock: { name: 'High Rock Lookout', lng: -121.885, lat: 46.985, pct: 74, color: '#1f9e89' },
-      larch:    { name: 'Larch Mountain', lng: -122.083, lat: 45.605, pct: 61, color: '#31688e' },
-      saddle:   { name: 'Saddle Mountain', lng: -123.683, lat: 45.964, pct: 54, color: '#31688e' },
-      dog:      { name: 'Dog Mountain', lng: -121.695, lat: 45.703, pct: 12, color: '#440154' },
-    };
+    const VIRIDIS = ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'];
+    const apiBaseUrl = (window.ABOVEDECK_CONFIG && window.ABOVEDECK_CONFIG.apiBaseUrl) || 'http://localhost:8000';
+
+    let selectedDayOffset = 0;
+    let peakMarkers = [];
+    let peaksInView = [];
+
+    function probToColor(pct) {
+      const t = Math.max(0, Math.min(100, pct)) / 100;
+      const idx = Math.round(t * (VIRIDIS.length - 1));
+      return VIRIDIS[idx];
+    }
+
+    function strengthLabel(strength) {
+      const labels = { excellent: 'Excellent', strong: 'Strong', possible: 'Possible', none: 'None' };
+      return labels[strength] || 'Unknown';
+    }
+
+    function formatElevationFt(elevationM) {
+      if (!elevationM) return 'Elevation unknown';
+      return `${Math.round(elevationM * 3.28084).toLocaleString()} ft`;
+    }
+
+    function selectedDateIso() {
+      const date = new Date();
+      date.setDate(date.getDate() + selectedDayOffset);
+      return date.toISOString().slice(0, 10);
+    }
+
+    function updateDayPills() {
+      document.querySelectorAll('.day-pill').forEach((button) => {
+        const active = Number(button.dataset.dayOffset) === selectedDayOffset;
+        button.className = active
+          ? 'day-pill rounded-full bg-viridis-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm'
+          : 'day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5';
+      });
+    }
+
+    function clearMarkers() {
+      peakMarkers.forEach((marker) => marker.remove());
+      peakMarkers = [];
+    }
+
+    function renderPeakList(peaks) {
+      const list = document.getElementById('peak-list');
+      list.innerHTML = '';
+
+      if (!peaks.length) {
+        list.innerHTML = '<p class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">No peaks in this view. Zoom in or pan to a mountainous area, then refresh.</p>';
+        return;
+      }
+
+      peaks.forEach((peak, index) => {
+        const pct = Math.round((peak.above_cloud_prob || 0) * 100);
+        const color = probToColor(pct);
+        const rank = index + 1;
+        const isFeatured = rank === 1;
+        const card = document.createElement('article');
+        card.className = `rank-card overflow-hidden rounded-2xl border bg-white shadow-sm ${isFeatured ? 'border-viridis-300/30' : 'border-slate-200'}`;
+        card.dataset.peakId = String(peak.id);
+
+        if (isFeatured) {
+          card.innerHTML = `
+            <div class="flex flex-col sm:flex-row">
+              <div class="relative h-24 w-full bg-gradient-to-br from-viridis-800 to-viridis-400 sm:h-auto sm:w-36">
+                <span class="absolute left-3 top-3 rounded-full bg-viridis-50 px-2 py-0.5 text-xs font-bold text-viridis-900">#${rank} · ${strengthLabel(peak.inversion_strength)}</span>
+              </div>
+              <div class="flex-1 p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="text-lg font-bold text-viridis-900">${peak.name}</h3>
+                    <p class="text-sm text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)}</p>
+                  </div>
+                  <div class="text-right shrink-0"><p class="text-3xl font-extrabold" style="color:${color}">${pct}%</p><p class="text-[11px] text-slate-400">above cloud</p></div>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span class="rounded-lg bg-viridis-50/30 px-2 py-1 font-medium text-viridis-800 ring-1 ring-viridis-100">Forecast pending</span>
+                  <span class="rounded-lg bg-viridis-900/5 px-2 py-1 text-slate-600">Confidence: ${peak.confidence}</span>
+                </div>
+              </div>
+            </div>`;
+        } else {
+          card.innerHTML = `
+            <div class="flex items-center gap-4 p-4 ${pct < 20 ? 'opacity-80' : ''}">
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-bold" style="background:${color}22;color:${color}">${rank}</span>
+              <div class="flex-1 min-w-0">
+                <h3 class="font-semibold text-viridis-900 truncate">${peak.name}</h3>
+                <p class="text-xs text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)} · ${strengthLabel(peak.inversion_strength)}</p>
+              </div>
+              <div class="text-right shrink-0"><p class="text-2xl font-bold" style="color:${color}">${pct}%</p></div>
+            </div>`;
+        }
+
+        card.addEventListener('mouseenter', () => {
+          document.querySelectorAll('.rank-card').forEach((node) => node.classList.remove('active'));
+          card.classList.add('active');
+          map.flyTo({ center: [peak.lon, peak.lat], zoom: 8.2, duration: 700 });
+        });
+        card.addEventListener('click', () => {
+          map.flyTo({ center: [peak.lon, peak.lat], zoom: 9, duration: 900 });
+        });
+        list.appendChild(card);
+      });
+    }
+
+    function renderMarkers(peaks) {
+      clearMarkers();
+      peaks.forEach((peak) => {
+        const pct = Math.round((peak.above_cloud_prob || 0) * 100);
+        const color = probToColor(pct);
+        const el = document.createElement('button');
+        el.className = 'grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[10px] font-bold text-viridis-900 shadow ring-2 ring-white';
+        el.style.background = color;
+        el.textContent = pct + '%';
+        el.title = peak.name;
+
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([peak.lon, peak.lat])
+          .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML(
+            `<strong>${peak.name}</strong><br><span style="color:#26828e">${pct}% above cloud</span><br><span style="color:#64748b">${formatElevationFt(peak.elevation_m)}</span>`
+          ))
+          .addTo(map);
+
+        el.addEventListener('click', () => {
+          map.flyTo({ center: [peak.lon, peak.lat], zoom: 9, duration: 900 });
+        });
+        peakMarkers.push(marker);
+      });
+    }
+
+    async function fetchPeaksInView() {
+      const status = document.getElementById('peak-list-status');
+      const bounds = map.getBounds();
+      const bbox = [
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+      ].join(',');
+      const url = `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`;
+
+      if (status) status.textContent = 'Loading peaks in view…';
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        const message = response.status === 503
+          ? 'API database not configured yet. Peaks will appear once DATABASE_URL is set and import completes.'
+          : `Failed to load peaks (${response.status})`;
+        if (status) status.textContent = message;
+        renderPeakList([]);
+        clearMarkers();
+        return;
+      }
+
+      const payload = await response.json();
+      peaksInView = (payload.peaks || []).sort((a, b) => (b.above_cloud_prob || 0) - (a.above_cloud_prob || 0));
+      renderPeakList(peaksInView);
+      renderMarkers(peaksInView);
+    }
+
+    async function searchPeaks(query) {
+      if (!query.trim()) {
+        renderPeakList(peaksInView);
+        renderMarkers(peaksInView);
+        return;
+      }
+      const response = await fetch(`${apiBaseUrl}/peaks/search?q=${encodeURIComponent(query.trim())}`);
+      if (!response.ok) return;
+      const payload = await response.json();
+      const results = payload.results || [];
+      const merged = results.map((result) => ({
+        id: result.id,
+        name: result.name,
+        state: result.state,
+        elevation_m: result.elevation_m,
+        lat: 0,
+        lon: 0,
+        above_cloud_prob: 0,
+        inversion_strength: 'none',
+        confidence: 'low',
+      }));
+      renderPeakList(merged);
+    }
 
     const map = new maplibregl.Map({
       container: 'map',
@@ -259,33 +349,28 @@
         },
       });
 
-      Object.entries(hikes).forEach(([id, h]) => {
-        const el = document.createElement('button');
-        el.className = 'grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[10px] font-bold text-viridis-900 shadow ring-2 ring-white';
-        el.style.background = h.color;
-        el.textContent = h.pct + '%';
-        el.title = h.name;
-
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([h.lng, h.lat])
-          .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<strong>${h.name}</strong><br><span style="color:#26828e">${h.pct}% above cloud</span>`
-          ))
-          .addTo(map);
-
-        el.addEventListener('click', () => {
-          map.flyTo({ center: [h.lng, h.lat], zoom: 9, duration: 900 });
-        });
-
-        const card = document.querySelector(`[data-hike="${id}"]`);
-        if (card) {
-          card.addEventListener('mouseenter', () => {
-            document.querySelectorAll('.rank-card').forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            map.flyTo({ center: [h.lng, h.lat], zoom: 8.2, duration: 700 });
-          });
-        }
+      fetchPeaksInView().catch(() => {
+        const status = document.getElementById('peak-list-status');
+        if (status) status.textContent = 'Could not reach the API. Check assets/config.js or run the API locally.';
       });
+    });
+
+    document.getElementById('refresh-area').addEventListener('click', () => {
+      fetchPeaksInView().catch(() => {});
+    });
+
+    document.querySelectorAll('.day-pill').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedDayOffset = Number(button.dataset.dayOffset);
+        updateDayPills();
+        fetchPeaksInView().catch(() => {});
+      });
+    });
+
+    let searchTimer;
+    document.getElementById('search-input').addEventListener('input', (event) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => searchPeaks(event.target.value), 250);
     });
 
     window.addEventListener('resize', () => map.resize());
