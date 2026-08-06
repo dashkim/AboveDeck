@@ -108,11 +108,16 @@
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
     const VIRIDIS = ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'];
+    const PEAK_DOT_COLOR = '#26828e';
     const apiBaseUrl = (window.ABOVEDECK_CONFIG && window.ABOVEDECK_CONFIG.apiBaseUrl) || 'http://localhost:8000';
+    const PEAKS_FETCH_CAP = 200;
 
     let selectedDayOffset = 0;
-    let peakMarkers = [];
     let peaksInView = [];
+    let lastFetchKey = '';
+    let peakPopup = null;
+    let moveendTimer = null;
+    let suppressMoveFetch = false;
 
     function probToColor(pct) {
       const t = Math.max(0, Math.min(100, pct)) / 100;
@@ -145,9 +150,71 @@
       });
     }
 
-    function clearMarkers() {
-      peakMarkers.forEach((marker) => marker.remove());
-      peakMarkers = [];
+    function currentBboxKey() {
+      const bounds = map.getBounds();
+      const bbox = [
+        bounds.getWest().toFixed(4),
+        bounds.getSouth().toFixed(4),
+        bounds.getEast().toFixed(4),
+        bounds.getNorth().toFixed(4),
+      ].join(',');
+      return `${bbox}|${selectedDateIso()}`;
+    }
+
+    function sortPeaksForList(peaks) {
+      const hasAnyElevation = peaks.some((peak) => peak.elevation_m);
+      const hasUsefulProb = peaks.some((peak) => (peak.above_cloud_prob || 0) > 0);
+      return [...peaks].sort((a, b) => {
+        if (hasUsefulProb) {
+          const probDiff = (b.above_cloud_prob || 0) - (a.above_cloud_prob || 0);
+          if (probDiff !== 0) return probDiff;
+        }
+        if (hasAnyElevation) {
+          const elevDiff = (b.elevation_m || 0) - (a.elevation_m || 0);
+          if (elevDiff !== 0) return elevDiff;
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    }
+
+    function peaksToGeoJSON(peaks) {
+      return {
+        type: 'FeatureCollection',
+        features: peaks.map((peak) => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [peak.lon, peak.lat],
+          },
+          properties: {
+            id: peak.id,
+            name: peak.name,
+            state: peak.state,
+            elevation_m: peak.elevation_m || 0,
+            above_cloud_prob: peak.above_cloud_prob || 0,
+            inversion_strength: peak.inversion_strength || 'none',
+            confidence: peak.confidence || 'low',
+          },
+        })),
+      };
+    }
+
+    function setPeaksOnMap(peaks) {
+      const source = map.getSource('peaks');
+      if (source) source.setData(peaksToGeoJSON(peaks));
+    }
+
+    function clearPeaksOnMap() {
+      setPeaksOnMap([]);
+      if (peakPopup) {
+        peakPopup.remove();
+        peakPopup = null;
+      }
+    }
+
+    function updatePeakListStatus(message) {
+      const status = document.getElementById('peak-list-status');
+      if (status) status.textContent = message;
     }
 
     function renderPeakList(peaks) {
@@ -155,13 +222,22 @@
       list.innerHTML = '';
 
       if (!peaks.length) {
-        list.innerHTML = '<p class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">No peaks in this view. Zoom in or pan to a mountainous area, then refresh.</p>';
+        list.innerHTML = '<p class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">No peaks in this view. Zoom in or pan to a mountainous area.</p>';
         return;
       }
 
+      const status = document.createElement('p');
+      status.id = 'peak-list-status';
+      status.className = 'rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500';
+      const capped = peaks.length >= PEAKS_FETCH_CAP;
+      status.textContent = capped
+        ? `Showing ${peaks.length} peaks in view (capped at ${PEAKS_FETCH_CAP} — zoom in for denser areas)`
+        : `Showing ${peaks.length} peaks in view`;
+      list.appendChild(status);
+
       peaks.forEach((peak, index) => {
         const pct = Math.round((peak.above_cloud_prob || 0) * 100);
-        const color = probToColor(pct);
+        const color = pct > 0 ? probToColor(pct) : PEAK_DOT_COLOR;
         const rank = index + 1;
         const isFeatured = rank === 1;
         const card = document.createElement('article');
@@ -203,42 +279,97 @@
         card.addEventListener('mouseenter', () => {
           document.querySelectorAll('.rank-card').forEach((node) => node.classList.remove('active'));
           card.classList.add('active');
-          map.flyTo({ center: [peak.lon, peak.lat], zoom: 8.2, duration: 700 });
+          suppressMoveFetch = true;
+          map.flyTo({ center: [peak.lon, peak.lat], zoom: Math.max(map.getZoom(), 8.2), duration: 700 });
+          map.once('moveend', () => { suppressMoveFetch = false; });
         });
         card.addEventListener('click', () => {
-          map.flyTo({ center: [peak.lon, peak.lat], zoom: 9, duration: 900 });
+          suppressMoveFetch = true;
+          map.flyTo({ center: [peak.lon, peak.lat], zoom: Math.max(map.getZoom(), 9), duration: 900 });
+          map.once('moveend', () => { suppressMoveFetch = false; });
+          showPeakPopup(peak);
         });
         list.appendChild(card);
       });
     }
 
-    function renderMarkers(peaks) {
-      clearMarkers();
-      peaks.forEach((peak) => {
-        const pct = Math.round((peak.above_cloud_prob || 0) * 100);
-        const color = probToColor(pct);
-        const el = document.createElement('button');
-        el.className = 'grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[10px] font-bold text-viridis-900 shadow ring-2 ring-white';
-        el.style.background = color;
-        el.textContent = pct + '%';
-        el.title = peak.name;
-
-        const marker = new maplibregl.Marker({ element: el })
-          .setLngLat([peak.lon, peak.lat])
-          .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML(
-            `<strong>${peak.name}</strong><br><span style="color:#26828e">${pct}% above cloud</span><br><span style="color:#64748b">${formatElevationFt(peak.elevation_m)}</span>`
-          ))
-          .addTo(map);
-
-        el.addEventListener('click', () => {
-          map.flyTo({ center: [peak.lon, peak.lat], zoom: 9, duration: 900 });
-        });
-        peakMarkers.push(marker);
-      });
+    function showPeakPopup(peak) {
+      const pct = Math.round((peak.above_cloud_prob || 0) * 100);
+      if (peakPopup) peakPopup.remove();
+      peakPopup = new maplibregl.Popup({ offset: 12, closeButton: true })
+        .setLngLat([peak.lon, peak.lat])
+        .setHTML(
+          `<strong>${peak.name}</strong><br>` +
+          `<span style="color:#64748b">${peak.state} · ${formatElevationFt(peak.elevation_m)}</span><br>` +
+          `<span style="color:#26828e">${pct}% above cloud</span>`
+        )
+        .addTo(map);
     }
 
-    async function fetchPeaksInView() {
-      const status = document.getElementById('peak-list-status');
+    function ensurePeaksLayers() {
+      if (!map.getSource('peaks')) {
+        map.addSource('peaks', {
+          type: 'geojson',
+          data: peaksToGeoJSON([]),
+        });
+      }
+
+      if (!map.getLayer('peaks-dots')) {
+        map.addLayer({
+          id: 'peaks-dots',
+          type: 'circle',
+          source: 'peaks',
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              5, 2.5,
+              8, 4,
+              11, 6,
+            ],
+            'circle-color': PEAK_DOT_COLOR,
+            'circle-opacity': 0.85,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#ffffff',
+          },
+        });
+      }
+
+      if (!map.getLayer('peaks-labels')) {
+        map.addLayer({
+          id: 'peaks-labels',
+          type: 'symbol',
+          source: 'peaks',
+          minzoom: 7,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': [
+              'interpolate', ['linear'], ['zoom'],
+              7, 10,
+              10, 13,
+            ],
+            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+            'text-offset': [0, 1.1],
+            'text-anchor': 'top',
+            'text-max-width': 8,
+            'text-allow-overlap': false,
+            'text-ignore-placement': false,
+            'text-optional': true,
+            'symbol-sort-key': ['-', ['get', 'elevation_m']],
+          },
+          paint: {
+            'text-color': '#440154',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.4,
+          },
+        });
+      }
+    }
+
+    async function fetchPeaksInView({ force = false } = {}) {
+      const fetchKey = currentBboxKey();
+      if (!force && fetchKey === lastFetchKey) return;
+      lastFetchKey = fetchKey;
+
       const bounds = map.getBounds();
       const bbox = [
         bounds.getWest(),
@@ -248,29 +379,30 @@
       ].join(',');
       const url = `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`;
 
-      if (status) status.textContent = 'Loading peaks in view…';
+      updatePeakListStatus('Loading peaks in view…');
 
       const response = await fetch(url);
       if (!response.ok) {
         const message = response.status === 503
           ? 'API database not configured yet. Peaks will appear once DATABASE_URL is set and import completes.'
           : `Failed to load peaks (${response.status})`;
-        if (status) status.textContent = message;
+        updatePeakListStatus(message);
+        peaksInView = [];
         renderPeakList([]);
-        clearMarkers();
+        clearPeaksOnMap();
         return;
       }
 
       const payload = await response.json();
-      peaksInView = (payload.peaks || []).sort((a, b) => (b.above_cloud_prob || 0) - (a.above_cloud_prob || 0));
+      peaksInView = sortPeaksForList(payload.peaks || []);
       renderPeakList(peaksInView);
-      renderMarkers(peaksInView);
+      setPeaksOnMap(peaksInView);
     }
 
     async function searchPeaks(query) {
       if (!query.trim()) {
         renderPeakList(peaksInView);
-        renderMarkers(peaksInView);
+        setPeaksOnMap(peaksInView);
         return;
       }
       const response = await fetch(`${apiBaseUrl}/peaks/search?q=${encodeURIComponent(query.trim())}`);
@@ -349,21 +481,53 @@
         },
       });
 
-      fetchPeaksInView().catch(() => {
-        const status = document.getElementById('peak-list-status');
-        if (status) status.textContent = 'Could not reach the API. Check assets/config.js or run the API locally.';
+      ensurePeaksLayers();
+
+      map.on('click', 'peaks-dots', (event) => {
+        const feature = event.features && event.features[0];
+        if (!feature) return;
+        const props = feature.properties;
+        const [lon, lat] = feature.geometry.coordinates;
+        showPeakPopup({
+          id: props.id,
+          name: props.name,
+          state: props.state,
+          elevation_m: props.elevation_m,
+          lon,
+          lat,
+          above_cloud_prob: props.above_cloud_prob,
+        });
+      });
+
+      map.on('mouseenter', 'peaks-dots', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'peaks-dots', () => {
+        map.getCanvas().style.cursor = '';
+      });
+
+      fetchPeaksInView({ force: true }).catch(() => {
+        updatePeakListStatus('Could not reach the API. Check assets/config.js or run the API locally.');
       });
     });
 
+    map.on('moveend', () => {
+      if (suppressMoveFetch) return;
+      clearTimeout(moveendTimer);
+      moveendTimer = setTimeout(() => {
+        fetchPeaksInView().catch(() => {});
+      }, 350);
+    });
+
     document.getElementById('refresh-area').addEventListener('click', () => {
-      fetchPeaksInView().catch(() => {});
+      fetchPeaksInView({ force: true }).catch(() => {});
     });
 
     document.querySelectorAll('.day-pill').forEach((button) => {
       button.addEventListener('click', () => {
         selectedDayOffset = Number(button.dataset.dayOffset);
         updateDayPills();
-        fetchPeaksInView().catch(() => {});
+        fetchPeaksInView({ force: true }).catch(() => {});
       });
     });
 
