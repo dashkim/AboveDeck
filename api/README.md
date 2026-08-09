@@ -11,8 +11,12 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-- `GET /health` — always returns 200
+- `GET /health` — always returns 200; includes DB connectivity and keepalive cron status
 - Data endpoints return 503 until `DATABASE_URL` is set
+
+## Keepalive cron
+
+GitHub Actions workflow [`.github/workflows/keepalive.yml`](../.github/workflows/keepalive.yml) pings `GET /health?source=keepalive` every 10 minutes so the Render free-tier API stays warm. The health response exposes `keepalive_status` (`ok` / `stale` / `unknown`) and `keepalive_last_ping_at` for the system status page.
 
 ## Render Web Service
 

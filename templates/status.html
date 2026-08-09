@@ -82,10 +82,19 @@
       <article id="widget-postgres" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div class="flex items-start justify-between gap-3">
           <h2 class="font-semibold text-viridis-900">Postgres</h2>
-          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Waiting…</span>
+          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Checking…</span>
         </div>
-        <p data-detail class="mt-3 text-sm text-slate-600">Neon database</p>
-        <p data-meta class="mt-4 text-[11px] text-slate-400">Connectivity check coming later</p>
+        <p data-detail class="mt-3 text-sm text-slate-600">Neon database · live ping via /health</p>
+        <p data-meta class="mt-4 text-[11px] text-slate-400">Last checked —</p>
+      </article>
+
+      <article id="widget-keepalive" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="font-semibold text-viridis-900">Keepalive Cron</h2>
+          <span data-status-pill class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">Checking…</span>
+        </div>
+        <p data-detail class="mt-3 text-sm text-slate-600">GitHub Actions · every 10 min</p>
+        <p data-meta class="mt-4 text-[11px] text-slate-400">Last ping —</p>
       </article>
 
       <article id="widget-pipeline" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm opacity-90">
@@ -182,9 +191,10 @@
         }
 
         const data = await res.json();
+        const degraded = data.status === 'degraded';
         setWidget('widget-api', {
-          label: 'Online',
-          pillClass: PILL.online,
+          label: degraded ? 'Degraded' : 'Online',
+          pillClass: degraded ? PILL.warning : PILL.online,
           detail: `status: ${data.status} · database: ${data.database} · ${latency} ms`,
           meta: `Last checked ${formatTime(now)}`,
         });
@@ -212,25 +222,90 @@
         setWidget('widget-postgres', {
           label: 'Unknown',
           pillClass: PILL.warning,
-          detail: 'Waiting for API health check',
+          detail: 'Could not read database status from API /health',
           meta: `Last checked ${formatTime(now)}`,
         });
         return;
       }
 
       const db = apiResult.data.database;
-      if (db === 'configured') {
+      if (db === 'connected') {
         setWidget('widget-postgres', {
-          label: 'Configured',
+          label: 'Connected',
           pillClass: PILL.online,
-          detail: 'DATABASE_URL is set — connectivity check coming later',
+          detail: 'Neon reachable — API ran SELECT 1 successfully',
           meta: `Last checked ${formatTime(now)}`,
         });
-      } else {
+      } else if (db === 'error') {
+        setWidget('widget-postgres', {
+          label: 'Error',
+          pillClass: PILL.offline,
+          detail: 'DATABASE_URL is set but the connection failed (check URL / SSL / Neon status)',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+      } else if (db === 'not_configured') {
         setWidget('widget-postgres', {
           label: 'Not configured',
           pillClass: PILL.warning,
           detail: 'DATABASE_URL not set on Render yet',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+      } else {
+        setWidget('widget-postgres', {
+          label: 'Unknown',
+          pillClass: PILL.warning,
+          detail: `Unexpected database status: ${db}`,
+          meta: `Last checked ${formatTime(now)}`,
+        });
+      }
+    }
+
+    function formatPingAge(iso) {
+      const pinged = new Date(iso);
+      if (Number.isNaN(pinged.getTime())) return null;
+      const mins = Math.max(0, Math.round((Date.now() - pinged.getTime()) / 60000));
+      if (mins < 1) return 'just now';
+      if (mins === 1) return '1 min ago';
+      return `${mins} min ago`;
+    }
+
+    function updateKeepalive(apiResult) {
+      const now = new Date();
+      if (!apiResult?.ok || !apiResult.data) {
+        setWidget('widget-keepalive', {
+          label: 'Unknown',
+          pillClass: PILL.warning,
+          detail: 'Could not read keepalive status from API /health',
+          meta: `Last checked ${formatTime(now)}`,
+        });
+        return;
+      }
+
+      const { keepalive_status: status, keepalive_last_ping_at: lastPing } = apiResult.data;
+      const age = lastPing ? formatPingAge(lastPing) : null;
+      const pingMeta = lastPing && age
+        ? `Last ping ${formatTime(new Date(lastPing))} (${age})`
+        : 'Last ping —';
+
+      if (status === 'ok') {
+        setWidget('widget-keepalive', {
+          label: 'Online',
+          pillClass: PILL.online,
+          detail: 'GitHub Actions · every 10 min · ping within 15 min',
+          meta: pingMeta,
+        });
+      } else if (status === 'stale') {
+        setWidget('widget-keepalive', {
+          label: 'Missed schedule',
+          pillClass: PILL.warning,
+          detail: 'Last keepalive ping is older than 15 minutes',
+          meta: pingMeta,
+        });
+      } else {
+        setWidget('widget-keepalive', {
+          label: 'No ping yet',
+          pillClass: PILL.warning,
+          detail: 'No keepalive received since API process started',
           meta: `Last checked ${formatTime(now)}`,
         });
       }
@@ -246,10 +321,17 @@
         detail: 'Neon database',
         meta: 'Last checked —',
       });
+      setWidget('widget-keepalive', {
+        label: 'Checking…',
+        pillClass: PILL.loading,
+        detail: 'GitHub Actions · every 10 min',
+        meta: 'Last ping —',
+      });
 
       checkStatic();
       const apiResult = await checkApi();
       updatePostgres(apiResult);
+      updateKeepalive(apiResult);
 
       btn.disabled = false;
     }

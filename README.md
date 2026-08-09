@@ -16,6 +16,8 @@ AboveDeck/
 
 **Deploy:** Render static site publishes from repo root (`.`), with `index.html` as the entry point. The API lives in `api/` with Root Directory set to `api`.
 
+**Keepalive:** A GitHub Actions cron (every 10 minutes) hits the Render API `/health?source=keepalive` to avoid free-tier cold starts. Status is shown on the system status page.
+
 ---
 
 ## Project Vision
