@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="../assets/favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="../assets/favicon.png" />
+  <title>AboveDeck — About</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            viridis: {
+              900: '#440154',
+              800: '#482878',
+              700: '#3e4989',
+              600: '#31688e',
+              500: '#26828e',
+              400: '#1f9e89',
+              300: '#35b779',
+              200: '#6ece58',
+              100: '#b5de2b',
+              50: '#fde725',
+            },
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-[#f3f6f4] text-slate-800">
+  <header class="sticky top-0 z-30 border-b border-viridis-600/15 bg-white/95 backdrop-blur">
+    <div class="flex items-center gap-4 px-5 py-3 lg:px-6">
+      <a href="../index.html" class="flex items-center gap-2.5 font-bold text-viridis-900">
+        <img src="../assets/favicon.png" alt="" class="h-8 w-8 rounded-lg shadow-sm" width="32" height="32" />
+        AboveDeck
+      </a>
+      <a href="../index.html" class="ml-auto rounded-lg border border-viridis-600/20 px-3 py-1.5 text-sm font-medium text-viridis-700 hover:bg-viridis-900/5">← Home</a>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-5 py-8 lg:px-6">
+    <header class="max-w-2xl">
+      <h1 class="text-2xl font-bold tracking-tight text-viridis-900 sm:text-3xl">About</h1>
+      <p class="mt-2 text-base leading-relaxed text-slate-600">
+        <span class="font-medium text-viridis-800">AboveDeck</span> means what it sounds like: we want to be
+        <span class="font-medium text-viridis-800">above the cloud deck</span> — on the sunny side of a mountain inversion while valleys sit in fog and grey.
+      </p>
+    </header>
+
+    <!-- Field photos -->
+    <section class="mt-10 grid gap-6 sm:grid-cols-2">
+      <figure>
+        <img
+          src="../assets/media/felix_timberline.jpg"
+          alt="Felix the dog above a sea of clouds on the Timberline Trail"
+          class="aspect-[4/3] h-auto w-full rounded-2xl object-cover shadow-sm ring-1 ring-viridis-600/10"
+          width="5712"
+          height="4284"
+        />
+        <figcaption class="mt-3 text-xs leading-relaxed text-slate-500">
+          Felix above a sea of clouds, Timberline Trail
+        </figcaption>
+      </figure>
+      <figure>
+        <img
+          src="../assets/media/islands_goatrocks.jpg"
+          alt="Mountain peaks rising like islands from a cloud sea near Goat Rocks, with a snowy volcano in the distance"
+          class="aspect-[4/3] h-auto w-full rounded-2xl object-cover shadow-sm ring-1 ring-viridis-600/10"
+          width="4284"
+          height="2330"
+        />
+        <figcaption class="mt-3 text-xs leading-relaxed text-slate-500">
+          Islands in the sky, Goat Rocks
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- Phenomena + portrait -->
+    <section class="mt-14 grid items-start gap-8 border-t border-viridis-600/10 pt-10 lg:grid-cols-12 lg:gap-10">
+      <div class="space-y-8 lg:col-span-7">
+        <div class="space-y-3">
+          <h2 class="text-lg font-semibold text-viridis-900">What is a cloud inversion?</h2>
+          <p class="text-sm leading-relaxed text-slate-600">
+            In a typical atmosphere, temperature falls with height. During a <span class="font-medium text-viridis-800">temperature inversion</span>, a layer of warmer air sits above cooler air near the ground. That “lid” traps cold air—and often fog or low stratus—in valleys and basins. Ridges and peaks poke through into clearer, often sunnier air, so the valleys look like a soft white ocean: a “sea of clouds,” with summits as islands.
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <h2 class="text-lg font-semibold text-viridis-900">What causes it?</h2>
+          <p class="text-sm leading-relaxed text-slate-600">
+            Mountain inversions are common when nights are clear and calm: the ground cools, cold air drains downhill into valleys, and a warmer layer forms above. High pressure, light winds, and moist valley air make low cloud or fog more likely. In the Pacific Northwest, terrain and marine moisture help set the stage—especially in the Cascades and Coast Range—though the exact height of the deck shifts with time of day, season, and weather pattern.
+          </p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            That variability is why these mornings are hard to call from a generic city forecast: the difference between socked-in and spectacular can be a few hundred feet of elevation and a couple of hours of burn-off.
+          </p>
+        </div>
+
+        <div class="space-y-3">
+          <h2 class="text-lg font-semibold text-viridis-900">Why it’s worth chasing</h2>
+          <p class="text-sm leading-relaxed text-slate-600">
+            Being above the deck means sun on a cloudy day—golden light over a white ocean, cold-clear air on the ridge, and a view most people in the valleys never see. That’s magic for hikers, backpackers, photographers, and skiers planning an early start or a ridge traverse. AboveDeck’s job isn’t another temp-and-rain summary. It’s to help answer:
+            <span class="font-medium text-viridis-800">where should you go to be above the clouds?</span>
+          </p>
+        </div>
+      </div>
+
+      <figure class="lg:col-span-5 lg:sticky lg:top-24">
+        <img
+          src="../assets/media/beautiful_girl.jpg"
+          alt="Hiker on a mountain ridge with clouds above and below"
+          class="h-auto w-full rounded-2xl object-cover shadow-sm ring-1 ring-viridis-600/10"
+          width="3024"
+          height="4032"
+        />
+        <figcaption class="mt-3 text-xs leading-relaxed text-slate-500">
+          Clouds above and below on the same ridge — mountain weather shifts fast, which makes “will I be above the deck?” hard to predict from a generic forecast.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- Model / prior work -->
+    <section class="mt-14 border-t border-viridis-600/10 pt-10">
+      <div class="max-w-3xl space-y-3">
+        <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600">Prior work</p>
+        <h2 class="text-lg font-semibold text-viridis-900">How the model idea started</h2>
+        <p class="text-sm leading-relaxed text-slate-600">
+          The concept grew from a school visualization and ML project over the Alps
+          (<a class="font-medium text-viridis-700 underline decoration-viridis-600/30 underline-offset-2 hover:text-viridis-900" href="https://github.com/dashkim/clouds" target="_blank" rel="noopener noreferrer">dashkim/clouds</a>).
+          Using ERA5 reanalysis, a ridge regression related meteorological features to inversion structure and compared predictions with observations—chosen for interpretability over a heavier neural net that was harder to train and explain.
+        </p>
+        <p class="text-sm leading-relaxed text-slate-600">
+          That Alps work is background, not the live Pacific Northwest forecast engine. AboveDeck’s map scores are still being built (rule-based elevation vs cloud base first, then richer models). The animation below shows what “model vs reality” looked like in that earlier project.
+        </p>
+        <p class="text-sm text-slate-500">
+          Full composite on
+          <a class="font-medium text-viridis-700 underline decoration-viridis-600/30 underline-offset-2 hover:text-viridis-900" href="https://youtu.be/8TlPONBAZ5A" target="_blank" rel="noopener noreferrer">YouTube</a>
+        </p>
+      </div>
+
+      <figure class="mt-8 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-viridis-600/10">
+        <img
+          loading="lazy"
+          src="../assets/media/east_core_inversion_compare.gif"
+          alt="Side-by-side animation comparing modeled and observed cloud inversion over the eastern Alps"
+          class="h-auto w-full"
+        />
+        <figcaption class="border-t border-viridis-600/10 px-4 py-3 text-xs text-slate-500">
+          Model vs observed inversion (eastern Alps core). Large file — may take a moment to load.
+        </figcaption>
+      </figure>
+    </section>
+
+    <footer class="mt-12 border-t border-viridis-600/10 pt-4 text-xs text-slate-400">
+      <a href="status.html" class="hover:text-viridis-700 hover:underline">System status</a>
+    </footer>
+  </main>
+</body>
+</html>
