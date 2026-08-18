@@ -13,6 +13,7 @@ class Base(DeclarativeBase):
 
 
 def _async_database_url(url: str) -> str:
+    url = url.replace("ssl=require", "sslmode=require")
     if url.startswith("postgresql+asyncpg://"):
         return url
     if url.startswith("postgresql://"):

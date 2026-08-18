@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+.venv312/
 venv/
 .env
 .env.*
@@ -17,3 +18,6 @@ planning/
 # Editor
 .vscode/
 .idea/
+
+# Pipeline logs
+logs/

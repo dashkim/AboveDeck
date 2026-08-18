@@ -1,0 +1,9 @@
+{
+  "model_version": "inv-clf-v1",
+  "trained_at": "2026-08-17T23:54:22.320587+00:00",
+  "n_samples": 360000,
+  "n_train": 288000,
+  "n_test": 72000,
+  "brier_score": 1.7436960123509286e-05,
+  "roc_auc": 1.0
+}

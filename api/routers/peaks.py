@@ -13,7 +13,11 @@ from schemas.peaks import (
     PeakListResponse,
     PeakSearchResponse,
     PeakSearchResult,
-    PeakSummary,
+)
+from services.predictions import (
+    fetch_hourly_predictions,
+    fetch_peak_predictions_for_date,
+    prediction_to_summary,
 )
 
 router = APIRouter(prefix="/peaks", tags=["peaks"])
@@ -27,30 +31,6 @@ def parse_bbox(bbox: str) -> tuple[float, float, float, float]:
     if west >= east or south >= north:
         raise HTTPException(status_code=422, detail="bbox bounds are invalid")
     return west, south, east, north
-
-
-def placeholder_summary(
-    peak_id: int,
-    name: str,
-    lat: float,
-    lon: float,
-    elevation_m: int | None,
-    state: str,
-) -> PeakSummary:
-    return PeakSummary(
-        id=peak_id,
-        name=name,
-        lat=lat,
-        lon=lon,
-        elevation_m=elevation_m or 0,
-        prominence_m=None,
-        state=state,
-        above_cloud_prob=0.0,
-        inversion_strength="none",
-        confidence="low",
-        best_window_start=None,
-        best_window_end=None,
-    )
 
 
 @router.get("", response_model=PeakListResponse)
@@ -77,10 +57,23 @@ async def list_peaks(
         .limit(200)
     )
     result = await session.execute(stmt)
+    rows = result.all()
+    peak_ids = [row.id for row in rows]
+    predictions = await fetch_peak_predictions_for_date(session, peak_ids, date, hour=hour)
+
     peaks = [
-        placeholder_summary(row.id, row.name, row.lat, row.lon, row.elevation_m, row.state)
-        for row in result.all()
+        prediction_to_summary(
+            row.id,
+            row.name,
+            row.lat,
+            row.lon,
+            row.elevation_m,
+            row.state,
+            predictions.get(row.id),
+        )
+        for row in rows
     ]
+    peaks.sort(key=lambda p: p.above_cloud_prob, reverse=True)
     return PeakListResponse(peaks=peaks, date=date, bbox=(west, south, east, north))
 
 
@@ -129,5 +122,15 @@ async def get_peak(
     if row is None:
         raise HTTPException(status_code=404, detail="Peak not found")
 
-    summary = placeholder_summary(row.id, row.name, row.lat, row.lon, row.elevation_m, row.state)
-    return PeakDetail(**summary.model_dump(), hourly=[])
+    predictions = await fetch_peak_predictions_for_date(session, [peak_id], date)
+    hourly = await fetch_hourly_predictions(session, peak_id, date)
+    summary = prediction_to_summary(
+        row.id,
+        row.name,
+        row.lat,
+        row.lon,
+        row.elevation_m,
+        row.state,
+        predictions.get(peak_id),
+    )
+    return PeakDetail(**summary.model_dump(), hourly=hourly)
