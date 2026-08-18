@@ -221,6 +221,47 @@
       if (status) status.textContent = message;
     }
 
+    const HEALTH_TIMEOUT_MS = 90000;
+    const PEAKS_TIMEOUT_MS = 90000;
+    const WAKE_ATTEMPTS = 3;
+
+    function fetchWithTimeout(url, timeoutMs) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+    }
+
+    function apiUnreachableMessage(error) {
+      const origin = window.location.origin;
+      if (origin === 'file://' || origin.startsWith('file:')) {
+        return 'Cannot call the API from a file:// page. Serve the site locally or use GitHub Pages.';
+      }
+      const aborted = error && (error.name === 'AbortError' || /abort/i.test(String(error.message || '')));
+      if (aborted) {
+        return 'API is asleep or slow to wake (Render free tier). Wait a minute and click Refresh this area.';
+      }
+      return `Could not reach the API from ${origin}. If this is a new origin, add it to CORS_ORIGINS on Render.`;
+    }
+
+    async function wakeApi() {
+      let lastError;
+      for (let attempt = 1; attempt <= WAKE_ATTEMPTS; attempt += 1) {
+        updatePeakListStatus(
+          attempt === 1
+            ? 'Waking API… first request can take up to a minute on Render free tier.'
+            : `Waking API… retry ${attempt} of ${WAKE_ATTEMPTS}`,
+        );
+        try {
+          const response = await fetchWithTimeout(`${apiBaseUrl}/health`, HEALTH_TIMEOUT_MS);
+          if (response.ok) return;
+          lastError = new Error(`health ${response.status}`);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error('API unreachable');
+    }
+
     function renderPeakList(peaks) {
       const list = document.getElementById('peak-list');
       list.innerHTML = '';
@@ -369,38 +410,48 @@
       }
     }
 
-    async function fetchPeaksInView({ force = false } = {}) {
+    async function fetchPeaksInView({ force = false, wake = false } = {}) {
       const fetchKey = currentBboxKey();
       if (!force && fetchKey === lastFetchKey) return;
       lastFetchKey = fetchKey;
 
-      const bounds = map.getBounds();
-      const bbox = [
-        bounds.getWest(),
-        bounds.getSouth(),
-        bounds.getEast(),
-        bounds.getNorth(),
-      ].join(',');
-      const url = `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`;
+      try {
+        if (wake) await wakeApi();
 
-      updatePeakListStatus('Loading peaks in view…');
+        const bounds = map.getBounds();
+        const bbox = [
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth(),
+        ].join(',');
+        const url = `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`;
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        const message = response.status === 503
-          ? 'API database not configured yet. Peaks will appear once DATABASE_URL is set and import completes.'
-          : `Failed to load peaks (${response.status})`;
-        updatePeakListStatus(message);
+        updatePeakListStatus('Loading peaks in view…');
+
+        const response = await fetchWithTimeout(url, PEAKS_TIMEOUT_MS);
+        if (!response.ok) {
+          const message = response.status === 503
+            ? 'API database not configured yet. Set DATABASE_URL on Render, then refresh.'
+            : `Failed to load peaks (${response.status})`;
+          updatePeakListStatus(message);
+          peaksInView = [];
+          renderPeakList([]);
+          clearPeaksOnMap();
+          return;
+        }
+
+        const payload = await response.json();
+        peaksInView = sortPeaksForList(payload.peaks || []);
+        renderPeakList(peaksInView);
+        setPeaksOnMap(peaksInView);
+      } catch (error) {
+        lastFetchKey = '';
+        updatePeakListStatus(apiUnreachableMessage(error));
         peaksInView = [];
         renderPeakList([]);
         clearPeaksOnMap();
-        return;
       }
-
-      const payload = await response.json();
-      peaksInView = sortPeaksForList(payload.peaks || []);
-      renderPeakList(peaksInView);
-      setPeaksOnMap(peaksInView);
     }
 
     async function searchPeaks(query) {
@@ -510,28 +561,26 @@
         map.getCanvas().style.cursor = '';
       });
 
-      fetchPeaksInView({ force: true }).catch(() => {
-        updatePeakListStatus('Could not reach the API. Check assets/config.js or run the API locally.');
-      });
+      fetchPeaksInView({ force: true, wake: true });
     });
 
     map.on('moveend', () => {
       if (suppressMoveFetch) return;
       clearTimeout(moveendTimer);
       moveendTimer = setTimeout(() => {
-        fetchPeaksInView().catch(() => {});
+        fetchPeaksInView();
       }, 350);
     });
 
     document.getElementById('refresh-area').addEventListener('click', () => {
-      fetchPeaksInView({ force: true }).catch(() => {});
+      fetchPeaksInView({ force: true, wake: true });
     });
 
     document.querySelectorAll('.day-pill').forEach((button) => {
       button.addEventListener('click', () => {
         selectedDayOffset = Number(button.dataset.dayOffset);
         updateDayPills();
-        fetchPeaksInView({ force: true }).catch(() => {});
+        fetchPeaksInView({ force: true, wake: true });
       });
     });
 
