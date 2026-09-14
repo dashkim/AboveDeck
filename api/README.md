@@ -38,7 +38,7 @@ Set these on the **abovedeck-web-service** dashboard. Existing values are not al
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | Neon connection string. Use `sslmode=require` (not `ssl=require`). Example: `postgresql://USER:PASS@HOST/neondb?sslmode=require` |
+| `DATABASE_URL` | Yes | Neon connection string. Either `?sslmode=require` or `?ssl=require` is fine — the API strips those for asyncpg and enables TLS via `connect_args`. Example: `postgresql://USER:PASS@HOST/neondb?sslmode=require` |
 | `CORS_ORIGINS` | Yes | Comma-separated browser origins allowed to call the API |
 
 **CORS_ORIGINS checklist**
