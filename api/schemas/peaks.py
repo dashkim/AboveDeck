@@ -44,6 +44,8 @@ class PeakDetail(PeakSummary):
 class PeakSearchResult(BaseModel):
     id: int
     name: str
+    lat: float
+    lon: float
     state: str
     elevation_m: int
 

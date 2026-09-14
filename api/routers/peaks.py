@@ -114,7 +114,14 @@ async def search_peaks(
     session: AsyncSession = Depends(get_session),
 ) -> PeakSearchResponse:
     stmt = (
-        select(Peak.id, Peak.name, Peak.state, Peak.elevation_m)
+        select(
+            Peak.id,
+            Peak.name,
+            func.ST_Y(Peak.geom).label("lat"),
+            func.ST_X(Peak.geom).label("lon"),
+            Peak.state,
+            Peak.elevation_m,
+        )
         .where(Peak.name.ilike(f"%{q}%"))
         .order_by(func.similarity(Peak.name, q).desc(), Peak.elevation_m.desc().nulls_last())
         .limit(20)
@@ -124,6 +131,8 @@ async def search_peaks(
         PeakSearchResult(
             id=row.id,
             name=row.name,
+            lat=float(row.lat),
+            lon=float(row.lon),
             state=row.state,
             elevation_m=row.elevation_m or 0,
         )

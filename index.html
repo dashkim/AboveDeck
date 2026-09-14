@@ -37,14 +37,24 @@
     }
     .maplibregl-popup-content {
       border-radius: 0.75rem;
-      padding: 0.65rem 0.85rem;
+      padding: 0.75rem 0.9rem;
       font-size: 0.8125rem;
       box-shadow: 0 8px 24px rgba(68, 1, 84, 0.18);
+      min-width: 11.5rem;
     }
-    .rank-card { transition: box-shadow 0.15s, border-color 0.15s; }
+    .rank-card { transition: box-shadow 0.15s, border-color 0.15s; cursor: pointer; }
     .rank-card:hover, .rank-card.active {
       border-color: #26828e;
       box-shadow: 0 0 0 1px #26828e33;
+    }
+    @keyframes skeleton-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .skeleton-block {
+      background: linear-gradient(90deg, #e8ece9 0%, #f4f6f5 40%, #e8ece9 80%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.2s ease-in-out infinite;
     }
   </style>
 </head>
@@ -69,6 +79,7 @@
       <div class="shrink-0 px-5 py-5 lg:px-6">
         <h1 class="text-2xl font-bold tracking-tight text-viridis-900 sm:text-3xl">Where to get above the clouds</h1>
         <p class="mt-1 text-sm text-slate-500">Oregon &amp; Washington · ranked by above-cloud probability</p>
+        <p id="best-pick" class="mt-2 text-sm font-medium text-viridis-800">Scanning peaks in view…</p>
         <div id="day-pills" class="mt-4 flex flex-wrap items-center gap-2">
           <button type="button" data-day-offset="0" class="day-pill rounded-full bg-viridis-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm">Today</button>
           <button type="button" data-day-offset="1" class="day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5">+1</button>
@@ -113,6 +124,7 @@
   <script>
     const VIRIDIS = ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'];
     const PEAK_DOT_COLOR = '#26828e';
+    const FEATURED_PHOTO = 'assets/media/islands_goatrocks.jpg';
     const apiBaseUrl = (window.ABOVEDECK_CONFIG && window.ABOVEDECK_CONFIG.apiBaseUrl) || 'http://localhost:8000';
     const PEAKS_FETCH_CAP = 200;
 
@@ -122,6 +134,10 @@
     let peakPopup = null;
     let moveendTimer = null;
     let suppressMoveFetch = false;
+    let selectedPeakId = null;
+    let pulseTimer = null;
+    let pulsePhase = 0;
+    let bestPeakIdInView = null;
 
     function probToColor(pct) {
       const t = Math.max(0, Math.min(100, pct)) / 100;
@@ -145,13 +161,40 @@
       return date.toISOString().slice(0, 10);
     }
 
+    function dayPillLabel(offset) {
+      if (offset === 0) return 'Today';
+      const date = new Date();
+      date.setDate(date.getDate() + offset);
+      return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+    }
+
     function updateDayPills() {
       document.querySelectorAll('.day-pill').forEach((button) => {
-        const active = Number(button.dataset.dayOffset) === selectedDayOffset;
+        const offset = Number(button.dataset.dayOffset);
+        const active = offset === selectedDayOffset;
+        button.textContent = dayPillLabel(offset);
         button.className = active
           ? 'day-pill rounded-full bg-viridis-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm'
           : 'day-pill rounded-full border border-viridis-600/15 bg-white px-4 py-1.5 text-sm text-slate-600 hover:bg-viridis-900/5';
       });
+    }
+
+    function updateBestPick(peaks) {
+      const el = document.getElementById('best-pick');
+      if (!el) return;
+      if (!peaks.length) {
+        bestPeakIdInView = null;
+        el.textContent = 'Pan the map to find peaks above the cloud deck.';
+        return;
+      }
+      const best = peaks[0];
+      bestPeakIdInView = best.id;
+      const pct = Math.round((best.above_cloud_prob || 0) * 100);
+      if (pct <= 0) {
+        el.textContent = `Highest in view: ${best.name} · ${formatElevationFt(best.elevation_m)}`;
+        return;
+      }
+      el.textContent = `Best in view: ${best.name} · ${pct}% · ${strengthLabel(best.inversion_strength)}`;
     }
 
     function currentBboxKey() {
@@ -208,17 +251,90 @@
       if (source) source.setData(peaksToGeoJSON(peaks));
     }
 
+    function clearSelectedPeak() {
+      selectedPeakId = null;
+      stopPulse();
+      const source = map.getSource('selected-peak');
+      if (source) source.setData({ type: 'FeatureCollection', features: [] });
+    }
+
     function clearPeaksOnMap() {
       setPeaksOnMap([]);
+      clearSelectedPeak();
       if (peakPopup) {
         peakPopup.remove();
         peakPopup = null;
       }
     }
 
+    function stopPulse() {
+      if (pulseTimer) {
+        clearInterval(pulseTimer);
+        pulseTimer = null;
+      }
+      pulsePhase = 0;
+    }
+
+    function startPulse() {
+      stopPulse();
+      if (!map.getLayer('selected-peak-halo')) return;
+      pulseTimer = setInterval(() => {
+        if (!map.getLayer('selected-peak-halo')) return;
+        pulsePhase += 0.1;
+        const t = (Math.sin(pulsePhase) + 1) / 2;
+        map.setPaintProperty('selected-peak-halo', 'circle-radius', 14 + t * 12);
+        map.setPaintProperty('selected-peak-halo', 'circle-opacity', 0.18 + t * 0.28);
+      }, 50);
+    }
+
+    function setSelectedPeak(peak) {
+      if (!peak || peak.lat == null || peak.lon == null || (peak.lat === 0 && peak.lon === 0)) {
+        clearSelectedPeak();
+        return;
+      }
+      selectedPeakId = peak.id;
+      const source = map.getSource('selected-peak');
+      if (!source) return;
+      source.setData({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [peak.lon, peak.lat] },
+          properties: { id: peak.id },
+        }],
+      });
+      startPulse();
+    }
+
+    function showLoadingSkeleton(message) {
+      const list = document.getElementById('peak-list');
+      const best = document.getElementById('best-pick');
+      if (best) best.textContent = 'Scanning peaks in view…';
+      list.innerHTML = `
+        <p id="peak-list-status" class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">${message}</p>
+        ${[0, 1, 2, 3].map((i) => `
+          <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-hidden="true">
+            <div class="flex items-center gap-4 p-4">
+              <div class="skeleton-block h-9 w-9 shrink-0 rounded-xl"></div>
+              <div class="min-w-0 flex-1 space-y-2">
+                <div class="skeleton-block h-4 rounded" style="width:${70 - i * 8}%"></div>
+                <div class="skeleton-block h-3 rounded" style="width:${48 - i * 4}%"></div>
+              </div>
+              <div class="skeleton-block h-8 w-12 shrink-0 rounded-lg"></div>
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+
     function updatePeakListStatus(message) {
       const status = document.getElementById('peak-list-status');
-      if (status) status.textContent = message;
+      if (status) {
+        status.textContent = message;
+        return;
+      }
+      const list = document.getElementById('peak-list');
+      list.innerHTML = `<p id="peak-list-status" class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">${message}</p>`;
     }
 
     const HEALTH_TIMEOUT_MS = 90000;
@@ -246,7 +362,7 @@
     async function wakeApi() {
       let lastError;
       for (let attempt = 1; attempt <= WAKE_ATTEMPTS; attempt += 1) {
-        updatePeakListStatus(
+        showLoadingSkeleton(
           attempt === 1
             ? 'Waking API… first request can take up to a minute on Render free tier.'
             : `Waking API… retry ${attempt} of ${WAKE_ATTEMPTS}`,
@@ -262,37 +378,63 @@
       throw lastError || new Error('API unreachable');
     }
 
-    function renderPeakList(peaks) {
+    function flyToPeak(peak, { showPopup = true } = {}) {
+      if (peak.lat == null || peak.lon == null || (peak.lat === 0 && peak.lon === 0)) return;
+      document.querySelectorAll('.rank-card').forEach((node) => {
+        node.classList.toggle('active', String(node.dataset.peakId) === String(peak.id));
+      });
+      setSelectedPeak(peak);
+      suppressMoveFetch = true;
+      map.flyTo({
+        center: [peak.lon, peak.lat],
+        zoom: Math.max(map.getZoom(), 9),
+        duration: 900,
+      });
+      map.once('moveend', () => { suppressMoveFetch = false; });
+      if (showPopup) showPeakPopup(peak);
+    }
+
+    function renderPeakList(peaks, { searching = false } = {}) {
       const list = document.getElementById('peak-list');
       list.innerHTML = '';
 
+      if (!searching) updateBestPick(peaks);
+
       if (!peaks.length) {
-        list.innerHTML = '<p class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">No peaks in this view. Zoom in or pan to a mountainous area.</p>';
+        list.innerHTML = `<p class="rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500">${
+          searching ? 'No peaks match that search.' : 'No peaks in this view. Zoom in or pan to a mountainous area.'
+        }</p>`;
         return;
       }
 
       const status = document.createElement('p');
       status.id = 'peak-list-status';
       status.className = 'rounded-xl border border-viridis-600/10 bg-white px-4 py-3 text-sm text-slate-500';
-      const capped = peaks.length >= PEAKS_FETCH_CAP;
-      status.textContent = capped
-        ? `Showing ${peaks.length} peaks in view (capped at ${PEAKS_FETCH_CAP} — zoom in for denser areas)`
-        : `Showing ${peaks.length} peaks in view`;
+      if (searching) {
+        status.textContent = `${peaks.length} search result${peaks.length === 1 ? '' : 's'} — click to fly there`;
+      } else {
+        const capped = peaks.length >= PEAKS_FETCH_CAP;
+        status.textContent = capped
+          ? `Showing ${peaks.length} peaks in view (capped at ${PEAKS_FETCH_CAP} — zoom in for denser areas)`
+          : `Showing ${peaks.length} peaks in view`;
+      }
       list.appendChild(status);
 
       peaks.forEach((peak, index) => {
         const pct = Math.round((peak.above_cloud_prob || 0) * 100);
         const color = pct > 0 ? probToColor(pct) : PEAK_DOT_COLOR;
         const rank = index + 1;
-        const isFeatured = rank === 1;
+        const isFeatured = rank === 1 && !searching;
+        const isBest = !searching && peak.id === bestPeakIdInView && pct > 0;
         const card = document.createElement('article');
-        card.className = `rank-card overflow-hidden rounded-2xl border bg-white shadow-sm ${isFeatured ? 'border-viridis-300/30' : 'border-slate-200'}`;
+        card.className = `rank-card overflow-hidden rounded-2xl border bg-white shadow-sm ${isFeatured ? 'border-viridis-300/30' : 'border-slate-200'}${selectedPeakId === peak.id ? ' active' : ''}`;
         card.dataset.peakId = String(peak.id);
 
         if (isFeatured) {
           card.innerHTML = `
             <div class="flex flex-col sm:flex-row">
-              <div class="relative h-24 w-full bg-gradient-to-br from-viridis-800 to-viridis-400 sm:h-auto sm:w-36">
+              <div class="relative h-28 w-full sm:h-auto sm:w-36">
+                <img src="${FEATURED_PHOTO}" alt="" class="h-full w-full object-cover" width="288" height="192" />
                 <span class="absolute left-3 top-3 rounded-full bg-viridis-50 px-2 py-0.5 text-xs font-bold text-viridis-900">#${rank} · ${strengthLabel(peak.inversion_strength)}</span>
               </div>
               <div class="flex-1 p-4">
@@ -306,33 +448,30 @@
                 <div class="mt-3 flex flex-wrap gap-2 text-xs">
                   <span class="rounded-lg bg-viridis-50/30 px-2 py-1 font-medium text-viridis-800 ring-1 ring-viridis-100">${pct > 0 ? strengthLabel(peak.inversion_strength) : 'No deck signal'}</span>
                   <span class="rounded-lg bg-viridis-900/5 px-2 py-1 text-slate-600">Confidence: ${peak.confidence}</span>
+                  ${isBest ? '<span class="rounded-lg bg-viridis-100/50 px-2 py-1 font-medium text-viridis-900">Best in view</span>' : ''}
                 </div>
               </div>
             </div>`;
         } else {
           card.innerHTML = `
-            <div class="flex items-center gap-4 p-4 ${pct < 20 ? 'opacity-80' : ''}">
-              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-bold" style="background:${color}22;color:${color}">${rank}</span>
+            <div class="flex items-center gap-4 p-4 ${pct < 20 && !searching ? 'opacity-80' : ''}">
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-bold" style="background:${color}22;color:${color}">${searching ? '◎' : rank}</span>
               <div class="flex-1 min-w-0">
                 <h3 class="font-semibold text-viridis-900 truncate">${peak.name}</h3>
-                <p class="text-xs text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)} · ${strengthLabel(peak.inversion_strength)}</p>
+                <p class="text-xs text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)}${searching ? '' : ` · ${strengthLabel(peak.inversion_strength)}`}</p>
               </div>
-              <div class="text-right shrink-0"><p class="text-2xl font-bold" style="color:${color}">${pct}%</p></div>
+              <div class="text-right shrink-0">${searching
+                ? '<p class="text-xs font-medium text-viridis-700">Fly to</p>'
+                : `<p class="text-2xl font-bold" style="color:${color}">${pct}%</p>`}</div>
             </div>`;
         }
 
         card.addEventListener('mouseenter', () => {
           document.querySelectorAll('.rank-card').forEach((node) => node.classList.remove('active'));
           card.classList.add('active');
-          suppressMoveFetch = true;
-          map.flyTo({ center: [peak.lon, peak.lat], zoom: Math.max(map.getZoom(), 8.2), duration: 700 });
-          map.once('moveend', () => { suppressMoveFetch = false; });
         });
         card.addEventListener('click', () => {
-          suppressMoveFetch = true;
-          map.flyTo({ center: [peak.lon, peak.lat], zoom: Math.max(map.getZoom(), 9), duration: 900 });
-          map.once('moveend', () => { suppressMoveFetch = false; });
-          showPeakPopup(peak);
+          flyToPeak({ ...peak, isBest });
         });
         list.appendChild(card);
       });
@@ -340,13 +479,21 @@
 
     function showPeakPopup(peak) {
       const pct = Math.round((peak.above_cloud_prob || 0) * 100);
+      const color = pct > 0 ? probToColor(pct) : PEAK_DOT_COLOR;
+      const strength = strengthLabel(peak.inversion_strength);
+      const confidence = peak.confidence || 'low';
+      const isBest = peak.isBest || (peak.id != null && peak.id === bestPeakIdInView && pct > 0);
       if (peakPopup) peakPopup.remove();
-      peakPopup = new maplibregl.Popup({ offset: 12, closeButton: true })
+      peakPopup = new maplibregl.Popup({ offset: 14, closeButton: true })
         .setLngLat([peak.lon, peak.lat])
         .setHTML(
-          `<strong>${peak.name}</strong><br>` +
+          `<div style="line-height:1.35">` +
+          (isBest ? `<div style="margin-bottom:0.35rem;font-size:0.7rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#31688e">Best in view today</div>` : '') +
+          `<strong style="font-size:0.95rem;color:#440154">${peak.name}</strong><br>` +
           `<span style="color:#64748b">${peak.state} · ${formatElevationFt(peak.elevation_m)}</span><br>` +
-          `<span style="color:#26828e">${pct}% above cloud</span>`
+          `<span style="display:inline-block;margin-top:0.35rem;font-weight:700;color:${color}">${pct}% above cloud</span><br>` +
+          `<span style="color:#475569">${strength} · Confidence: ${confidence}</span>` +
+          `</div>`
         )
         .addTo(map);
     }
@@ -356,6 +503,27 @@
         map.addSource('peaks', {
           type: 'geojson',
           data: peaksToGeoJSON([]),
+        });
+      }
+
+      if (!map.getSource('selected-peak')) {
+        map.addSource('selected-peak', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+      }
+
+      if (!map.getLayer('selected-peak-halo')) {
+        map.addLayer({
+          id: 'selected-peak-halo',
+          type: 'circle',
+          source: 'selected-peak',
+          paint: {
+            'circle-radius': 18,
+            'circle-color': '#fde725',
+            'circle-opacity': 0.35,
+            'circle-stroke-width': 0,
+          },
         });
       }
 
@@ -371,10 +539,36 @@
               8, 4,
               11, 6,
             ],
-            'circle-color': PEAK_DOT_COLOR,
-            'circle-opacity': 0.85,
+            'circle-color': [
+              'interpolate', ['linear'], ['get', 'above_cloud_prob'],
+              0, '#440154',
+              0.25, '#31688e',
+              0.5, '#35b779',
+              0.75, '#b5de2b',
+              1, '#fde725',
+            ],
+            'circle-opacity': 0.9,
             'circle-stroke-width': 1,
             'circle-stroke-color': '#ffffff',
+          },
+        });
+      }
+
+      if (!map.getLayer('selected-peak-core')) {
+        map.addLayer({
+          id: 'selected-peak-core',
+          type: 'circle',
+          source: 'selected-peak',
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              5, 5,
+              8, 7,
+              11, 9,
+            ],
+            'circle-color': '#fde725',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#440154',
           },
         });
       }
@@ -417,6 +611,7 @@
 
       try {
         if (wake) await wakeApi();
+        else showLoadingSkeleton('Loading peaks in view…');
 
         const bounds = map.getBounds();
         const bbox = [
@@ -427,16 +622,14 @@
         ].join(',');
         const url = `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`;
 
-        updatePeakListStatus('Loading peaks in view…');
-
         const response = await fetchWithTimeout(url, PEAKS_TIMEOUT_MS);
         if (!response.ok) {
           const message = response.status === 503
             ? 'API database not configured yet. Set DATABASE_URL on Render, then refresh.'
             : `Failed to load peaks (${response.status})`;
+          updateBestPick([]);
           updatePeakListStatus(message);
           peaksInView = [];
-          renderPeakList([]);
           clearPeaksOnMap();
           return;
         }
@@ -447,9 +640,9 @@
         setPeaksOnMap(peaksInView);
       } catch (error) {
         lastFetchKey = '';
+        updateBestPick([]);
         updatePeakListStatus(apiUnreachableMessage(error));
         peaksInView = [];
-        renderPeakList([]);
         clearPeaksOnMap();
       }
     }
@@ -463,19 +656,18 @@
       const response = await fetch(`${apiBaseUrl}/peaks/search?q=${encodeURIComponent(query.trim())}`);
       if (!response.ok) return;
       const payload = await response.json();
-      const results = payload.results || [];
-      const merged = results.map((result) => ({
+      const results = (payload.results || []).map((result) => ({
         id: result.id,
         name: result.name,
         state: result.state,
         elevation_m: result.elevation_m,
-        lat: 0,
-        lon: 0,
+        lat: result.lat,
+        lon: result.lon,
         above_cloud_prob: 0,
         inversion_strength: 'none',
         confidence: 'low',
       }));
-      renderPeakList(merged);
+      renderPeakList(results, { searching: true });
     }
 
     const map = new maplibregl.Map({
@@ -543,15 +735,19 @@
         if (!feature) return;
         const props = feature.properties;
         const [lon, lat] = feature.geometry.coordinates;
-        showPeakPopup({
+        const peak = {
           id: props.id,
           name: props.name,
           state: props.state,
-          elevation_m: props.elevation_m,
+          elevation_m: Number(props.elevation_m) || 0,
           lon,
           lat,
-          above_cloud_prob: props.above_cloud_prob,
-        });
+          above_cloud_prob: Number(props.above_cloud_prob) || 0,
+          inversion_strength: props.inversion_strength || 'none',
+          confidence: props.confidence || 'low',
+          isBest: Number(props.id) === Number(bestPeakIdInView),
+        };
+        flyToPeak(peak);
       });
 
       map.on('mouseenter', 'peaks-dots', () => {
@@ -590,6 +786,7 @@
       searchTimer = setTimeout(() => searchPeaks(event.target.value), 250);
     });
 
+    updateDayPills();
     window.addEventListener('resize', () => map.resize());
   </script>
 </body>
