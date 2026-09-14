@@ -22,9 +22,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 class ForecastCacheRequest(BaseModel):
     password: str = Field(min_length=1)
-    limit: int = Field(200, ge=1, le=500, description="Highest peaks to score now")
-    forecast_days: int = Field(3, ge=1, le=7)
-    refresh_now: bool = True
+    limit: int = Field(80, ge=1, le=500, description="Highest peaks to score now")
+    forecast_days: int = Field(1, ge=1, le=7)
+    refresh_now: bool = False
     trigger_nightly: bool = True
 
 
@@ -36,6 +36,7 @@ class ForecastCacheResponse(BaseModel):
     dates: list[date] = Field(default_factory=list)
     nightly_workflow: str
     message: str
+    weather_error: str | None = None
 
 
 def _check_password(password: str, settings: Settings) -> None:
@@ -79,8 +80,14 @@ async def run_forecast_cache(
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> ForecastCacheResponse:
-    """Status-page override: score top peaks now and/or dispatch the nightly GHA job."""
+    """Status-page override: dispatch nightly GHA and/or score a small peak set now."""
     _check_password(body.password, settings)
+
+    if not body.trigger_nightly and not body.refresh_now:
+        raise HTTPException(
+            status_code=422,
+            detail="Enable Dispatch nightly and/or Score now.",
+        )
 
     nightly = "skipped"
     if body.trigger_nightly:
@@ -89,6 +96,7 @@ async def run_forecast_cache(
     refreshed_rows = 0
     peak_count = 0
     dates: list[date] = []
+    weather_error: str | None = None
 
     if body.refresh_now:
         stmt = (
@@ -126,21 +134,29 @@ async def run_forecast_cache(
                     max_peaks=body.limit,
                 )
         except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Weather fetch failed after partial work: {exc}",
-            ) from exc
+            # Render's IP is often Open-Meteo rate-limited; don't fail the whole
+            # override if nightly dispatch succeeded.
+            weather_error = str(exc)
 
-    parts = []
+    parts: list[str] = []
     if body.refresh_now:
-        parts.append(f"scored {peak_count} peaks → {refreshed_rows} rows ({MODEL_VERSION})")
+        if weather_error:
+            parts.append(
+                f"score now failed ({weather_error}). "
+                "Render is often rate-limited by Open-Meteo — use Dispatch nightly instead."
+            )
+        else:
+            parts.append(f"scored {peak_count} peaks → {refreshed_rows} rows ({MODEL_VERSION})")
     parts.append(f"nightly workflow: {nightly}")
+
+    ok = weather_error is None or nightly == "dispatched"
     return ForecastCacheResponse(
-        ok=True,
+        ok=ok,
         model_version=MODEL_VERSION,
         peak_count=peak_count,
         refreshed_rows=refreshed_rows,
         dates=dates,
         nightly_workflow=nightly,
         message="; ".join(parts),
+        weather_error=weather_error,
     )

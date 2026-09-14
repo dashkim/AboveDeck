@@ -176,23 +176,30 @@ def _score_hour(peak: PeakLocation, hour: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+UPSERT_BATCH_SIZE = 400
+
+
 async def upsert_prediction_rows(session: AsyncSession, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
-    stmt = insert(Prediction).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["peak_id", "valid_at", "model_version"],
-        set_={
-            "lead_hours": stmt.excluded.lead_hours,
-            "above_cloud_prob": stmt.excluded.above_cloud_prob,
-            "inversion_strength": stmt.excluded.inversion_strength,
-            "estimated_cloud_base_m": stmt.excluded.estimated_cloud_base_m,
-            "confidence": stmt.excluded.confidence,
-        },
-    )
-    await session.execute(stmt)
+    total = 0
+    for start in range(0, len(rows), UPSERT_BATCH_SIZE):
+        chunk = rows[start : start + UPSERT_BATCH_SIZE]
+        stmt = insert(Prediction).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["peak_id", "valid_at", "model_version"],
+            set_={
+                "lead_hours": stmt.excluded.lead_hours,
+                "above_cloud_prob": stmt.excluded.above_cloud_prob,
+                "inversion_strength": stmt.excluded.inversion_strength,
+                "estimated_cloud_base_m": stmt.excluded.estimated_cloud_base_m,
+                "confidence": stmt.excluded.confidence,
+            },
+        )
+        await session.execute(stmt)
+        total += len(chunk)
     await session.commit()
-    return len(rows)
+    return total
 
 
 async def refresh_peak_forecasts(
@@ -209,7 +216,7 @@ async def refresh_peak_forecasts(
     ordered = sorted(peaks, key=lambda p: p.elevation_m, reverse=True)[:max_peaks]
     fetched_at = datetime.now(timezone.utc)
     forecast_days = _forecast_days_for(target_date, fetched_at.date())
-    scored: list[dict[str, Any]] = []
+    total = 0
 
     async with httpx.AsyncClient() as client:
         for start in range(0, len(ordered), API_BATCH_SIZE):
@@ -223,10 +230,12 @@ async def refresh_peak_forecasts(
                 fetched_at=fetched_at,
                 target_date=target_date,
             )
+            scored: list[dict[str, Any]] = []
             for peak, hours in zip(batch, hour_groups):
                 scored.extend(_score_hour(peak, hour) for hour in hours)
+            total += await upsert_prediction_rows(session, scored)
 
-    return await upsert_prediction_rows(session, scored)
+    return total
 
 
 def day_bounds(target_date: date) -> tuple[datetime, datetime]:
