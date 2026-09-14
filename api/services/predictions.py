@@ -18,7 +18,11 @@ async def _latest_model_version(
     day_start: datetime,
     day_end: datetime,
 ) -> str | None:
-    # Prefer current live rule scores over legacy rules-v0 / all-zero classifier.
+    """Only serve the current live rules version.
+
+    Do not fall back to legacy rules-v0 — those summit-anchored LCL rows cap
+    near 48% and look like real forecasts when Open-Meteo refresh fails.
+    """
     preferred = await session.execute(
         select(Prediction.model_version)
         .where(
@@ -29,22 +33,7 @@ async def _latest_model_version(
         )
         .limit(1)
     )
-    version = preferred.scalar_one_or_none()
-    if version:
-        return version
-
-    stmt = (
-        select(Prediction.model_version)
-        .where(
-            Prediction.peak_id.in_(peak_ids),
-            Prediction.valid_at >= day_start,
-            Prediction.valid_at <= day_end,
-        )
-        .order_by(Prediction.created_at.desc())
-        .limit(1)
-    )
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return preferred.scalar_one_or_none()
 
 
 async def fetch_peak_predictions_for_date(

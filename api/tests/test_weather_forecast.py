@@ -44,17 +44,23 @@ def test_surface_elevation_prefers_forecast_grid_below_peak():
     assert surface == 1200
 
 
-def test_surface_elevation_falls_back_when_forecast_near_summit():
+def test_surface_elevation_uses_near_summit_forecast_grid():
+    # Mt Hood-like: model DEM only ~100 m below summit — still use it.
+    surface = surface_elevation_for_lcl(3424, forecast_elevation_m=3319)
+    assert surface == 3319
+
+
+def test_surface_elevation_falls_back_when_forecast_at_summit():
     surface = surface_elevation_for_lcl(
         3000,
-        forecast_elevation_m=2950,
+        forecast_elevation_m=2990,
         prominence_m=800,
     )
     assert surface == 2200
 
 
 def test_surface_elevation_default_valley_drop():
-    surface = surface_elevation_for_lcl(2000, forecast_elevation_m=1980)
+    surface = surface_elevation_for_lcl(2000, forecast_elevation_m=1990)
     assert surface == 1400
 
 

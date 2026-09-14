@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_MIN_SURFACE_DROP_M = 150.0
+_SUMMIT_ELEV_TOLERANCE_M = 25.0
 _DEFAULT_VALLEY_DROP_M = 600.0
 
 
@@ -18,7 +18,7 @@ def surface_elevation_for_lcl(
     *,
     forecast_elevation_m: float | None = None,
     prominence_m: float | None = None,
-    min_drop_m: float = _MIN_SURFACE_DROP_M,
+    summit_tolerance_m: float = _SUMMIT_ELEV_TOLERANCE_M,
     default_drop_m: float = _DEFAULT_VALLEY_DROP_M,
 ) -> float:
     """Pick the ground elevation for LCL — never the summit itself.
@@ -27,14 +27,13 @@ def surface_elevation_for_lcl(
     made cloud_base = peak + LCL_AGL and capped probabilities near 48%.
     """
     peak = float(peak_elevation_m)
-    max_surface = peak - min_drop_m
 
-    if forecast_elevation_m is not None and forecast_elevation_m <= max_surface:
+    if forecast_elevation_m is not None and float(forecast_elevation_m) < peak - summit_tolerance_m:
         return max(0.0, float(forecast_elevation_m))
 
     if prominence_m is not None and prominence_m > 0:
         valley = peak - float(prominence_m)
-        if valley <= max_surface:
+        if valley < peak - summit_tolerance_m:
             return max(0.0, valley)
 
     return max(0.0, peak - default_drop_m)

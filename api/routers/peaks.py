@@ -82,7 +82,7 @@ async def list_peaks(
             if row.elevation_m is not None
         ]
         try:
-            await refresh_peak_forecasts(session, locations, date)
+            await refresh_peak_forecasts(session, locations, date, max_peaks=40)
             predictions = await fetch_peak_predictions_for_date(
                 session, peak_ids, date, hour=hour
             )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import Any, Sequence
@@ -32,8 +33,11 @@ HOURLY_VARIABLES = (
 )
 # rules-v1: LCL anchored at forecast/valley surface elevation, not the summit.
 MODEL_VERSION = "rules-v1"
-API_BATCH_SIZE = 40
+API_BATCH_SIZE = 20
 DEFAULT_REFRESH_CAP = 80
+_FETCH_MAX_ATTEMPTS = 5
+_FETCH_RETRY_BASE_SECONDS = 1.5
+_BATCH_PAUSE_SECONDS = 0.75
 
 
 @dataclass(frozen=True)
@@ -110,15 +114,37 @@ async def _fetch_batch(
         "models": "best_match",
         "forecast_days": forecast_days,
     }
-    response = await client.get(OPEN_METEO_URL, params=params, timeout=60.0)
-    response.raise_for_status()
-    payload = response.json()
-    if isinstance(payload, list):
-        return [
-            _parse_hourly_payload(item, fetched_at=fetched_at, target_date=target_date)
-            for item in payload
-        ]
-    return [_parse_hourly_payload(payload, fetched_at=fetched_at, target_date=target_date)]
+    last_error: Exception | None = None
+    for attempt in range(_FETCH_MAX_ATTEMPTS):
+        try:
+            response = await client.get(OPEN_METEO_URL, params=params, timeout=60.0)
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after and retry_after.isdigit() else (
+                    _FETCH_RETRY_BASE_SECONDS * (2**attempt)
+                )
+                await asyncio.sleep(delay)
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, list):
+                return [
+                    _parse_hourly_payload(item, fetched_at=fetched_at, target_date=target_date)
+                    for item in payload
+                ]
+            return [_parse_hourly_payload(payload, fetched_at=fetched_at, target_date=target_date)]
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            if exc.response is not None and exc.response.status_code == 429:
+                await asyncio.sleep(_FETCH_RETRY_BASE_SECONDS * (2**attempt))
+                continue
+            raise
+        except httpx.TransportError as exc:
+            last_error = exc
+            await asyncio.sleep(_FETCH_RETRY_BASE_SECONDS * (2**attempt))
+    if last_error is not None:
+        raise last_error
+    raise httpx.HTTPError("Open-Meteo rate limited after retries")
 
 
 def _score_hour(peak: PeakLocation, hour: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +213,8 @@ async def refresh_peak_forecasts(
 
     async with httpx.AsyncClient() as client:
         for start in range(0, len(ordered), API_BATCH_SIZE):
+            if start > 0:
+                await asyncio.sleep(_BATCH_PAUSE_SECONDS)
             batch = ordered[start : start + API_BATCH_SIZE]
             hour_groups = await _fetch_batch(
                 client,
