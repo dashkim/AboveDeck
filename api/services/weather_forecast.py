@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.predictions import Prediction
-from services.cloud_base import estimate_cloud_base_m
+from services.cloud_base import estimate_cloud_base_m, surface_elevation_for_lcl
 from services.scoring import (
     above_cloud_probability,
     confidence_from_lead_hours,
@@ -30,7 +30,8 @@ HOURLY_VARIABLES = (
     "wind_direction_10m",
     "surface_pressure",
 )
-MODEL_VERSION = "rules-v0"
+# rules-v1: LCL anchored at forecast/valley surface elevation, not the summit.
+MODEL_VERSION = "rules-v1"
 API_BATCH_SIZE = 40
 DEFAULT_REFRESH_CAP = 80
 
@@ -41,6 +42,7 @@ class PeakLocation:
     lat: float
     lon: float
     elevation_m: float
+    prominence_m: float | None = None
 
 
 def _forecast_days_for(target_date: date, today: date | None = None) -> int:
@@ -59,6 +61,9 @@ def _parse_hourly_payload(
 ) -> list[dict[str, Any]]:
     hourly = payload.get("hourly") or {}
     times = hourly.get("time") or []
+    forecast_elevation_m = payload.get("elevation")
+    if forecast_elevation_m is not None:
+        forecast_elevation_m = float(forecast_elevation_m)
     rows: list[dict[str, Any]] = []
     for idx, time_str in enumerate(times):
         valid_at = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
@@ -75,6 +80,7 @@ def _parse_hourly_payload(
                 "dewpoint_c": _at(hourly, "dewpoint_2m", idx),
                 "rh": _at(hourly, "relative_humidity_2m", idx),
                 "cloud_cover_low": _at(hourly, "cloud_cover_low", idx),
+                "forecast_elevation_m": forecast_elevation_m,
             }
         )
     return rows
@@ -116,10 +122,15 @@ async def _fetch_batch(
 
 
 def _score_hour(peak: PeakLocation, hour: dict[str, Any]) -> dict[str, Any]:
+    surface_m = surface_elevation_for_lcl(
+        peak.elevation_m,
+        forecast_elevation_m=hour.get("forecast_elevation_m"),
+        prominence_m=peak.prominence_m,
+    )
     cloud_base_m = estimate_cloud_base_m(
         temp_c=hour["temp_c"],
         dewpoint_c=hour["dewpoint_c"],
-        elevation_m=peak.elevation_m,
+        elevation_m=surface_m,
         cloud_cover_low=hour["cloud_cover_low"],
     )
     prob = (
@@ -165,7 +176,7 @@ async def refresh_peak_forecasts(
     *,
     max_peaks: int = DEFAULT_REFRESH_CAP,
 ) -> int:
-    """Pull Open-Meteo for peaks and upsert rules-v0 predictions for target_date."""
+    """Pull Open-Meteo for peaks and upsert rules-v1 predictions for target_date."""
     if not peaks:
         return 0
 

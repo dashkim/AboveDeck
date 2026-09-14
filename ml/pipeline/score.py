@@ -161,7 +161,7 @@ def main() -> None:
     parser.add_argument(
         "--use-ml",
         action="store_true",
-        help="Use LightGBM artifact if present (default: rules-v0 only)",
+        help="Use LightGBM artifact if present (default: rules-v1 only)",
     )
     args = parser.parse_args()
     run(limit=args.limit, use_ml=args.use_ml)

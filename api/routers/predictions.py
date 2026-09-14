@@ -10,7 +10,7 @@ from db import get_session
 from dependencies import require_db
 from models.peaks import Peak
 from schemas.predictions import GridResponse
-from services.weather_forecast import PeakLocation, refresh_peak_forecasts
+from services.weather_forecast import MODEL_VERSION, PeakLocation, refresh_peak_forecasts
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
@@ -19,7 +19,7 @@ class RefreshResponse(BaseModel):
     refreshed_rows: int = Field(ge=0)
     peak_count: int = Field(ge=0)
     date: date
-    model_version: str = "rules-v0"
+    model_version: str = MODEL_VERSION
 
 
 def parse_bbox(bbox: str) -> tuple[float, float, float, float]:
@@ -40,7 +40,7 @@ async def refresh_predictions(
     _settings=Depends(require_db),
     session: AsyncSession = Depends(get_session),
 ) -> RefreshResponse:
-    """Pull Open-Meteo for peaks in view and upsert rules-v0 scores."""
+    """Pull Open-Meteo for peaks in view and upsert live rule scores."""
     west, south, east, north = parse_bbox(bbox)
     envelope = gf.ST_MakeEnvelope(west, south, east, north, 4326)
     stmt = (
@@ -49,6 +49,7 @@ async def refresh_predictions(
             func.ST_Y(Peak.geom).label("lat"),
             func.ST_X(Peak.geom).label("lon"),
             Peak.elevation_m,
+            Peak.prominence_m,
         )
         .where(Peak.geom.ST_Intersects(envelope), Peak.elevation_m.is_not(None))
         .order_by(Peak.elevation_m.desc())
@@ -61,6 +62,7 @@ async def refresh_predictions(
             lat=float(row.lat),
             lon=float(row.lon),
             elevation_m=float(row.elevation_m),
+            prominence_m=float(row.prominence_m) if row.prominence_m is not None else None,
         )
         for row in result.all()
     ]
@@ -75,6 +77,7 @@ async def refresh_predictions(
         refreshed_rows=refreshed,
         peak_count=len(locations),
         date=date,
+        model_version=MODEL_VERSION,
     )
 
 

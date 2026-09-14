@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.predictions import Prediction
 from schemas.peaks import HourlyPrediction, PeakSummary
+from services.weather_forecast import MODEL_VERSION as LIVE_RULES_VERSION
 
 
 async def _latest_model_version(
@@ -17,14 +18,14 @@ async def _latest_model_version(
     day_start: datetime,
     day_end: datetime,
 ) -> str | None:
-    # Prefer live rule scores over the legacy all-zero classifier artifact.
+    # Prefer current live rule scores over legacy rules-v0 / all-zero classifier.
     preferred = await session.execute(
         select(Prediction.model_version)
         .where(
             Prediction.peak_id.in_(peak_ids),
             Prediction.valid_at >= day_start,
             Prediction.valid_at <= day_end,
-            Prediction.model_version == "rules-v0",
+            Prediction.model_version == LIVE_RULES_VERSION,
         )
         .limit(1)
     )

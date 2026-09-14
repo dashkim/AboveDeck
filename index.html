@@ -124,7 +124,6 @@
   <script>
     const VIRIDIS = ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'];
     const PEAK_DOT_COLOR = '#26828e';
-    const FEATURED_PHOTO = 'assets/media/islands_goatrocks.jpg';
     const apiBaseUrl = (window.ABOVEDECK_CONFIG && window.ABOVEDECK_CONFIG.apiBaseUrl) || 'http://localhost:8000';
     const PEAKS_FETCH_CAP = 200;
 
@@ -424,47 +423,22 @@
         const pct = Math.round((peak.above_cloud_prob || 0) * 100);
         const color = pct > 0 ? probToColor(pct) : PEAK_DOT_COLOR;
         const rank = index + 1;
-        const isFeatured = rank === 1 && !searching;
         const isBest = !searching && peak.id === bestPeakIdInView && pct > 0;
         const card = document.createElement('article');
-        card.className = `rank-card overflow-hidden rounded-2xl border bg-white shadow-sm ${isFeatured ? 'border-viridis-300/30' : 'border-slate-200'}${selectedPeakId === peak.id ? ' active' : ''}`;
+        card.className = `rank-card overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm${selectedPeakId === peak.id ? ' active' : ''}`;
         card.dataset.peakId = String(peak.id);
 
-        if (isFeatured) {
-          card.innerHTML = `
-            <div class="flex flex-col sm:flex-row">
-              <div class="relative h-28 w-full sm:h-auto sm:w-36">
-                <img src="${FEATURED_PHOTO}" alt="" class="h-full w-full object-cover" width="288" height="192" />
-                <span class="absolute left-3 top-3 rounded-full bg-viridis-50 px-2 py-0.5 text-xs font-bold text-viridis-900">#${rank} · ${strengthLabel(peak.inversion_strength)}</span>
-              </div>
-              <div class="flex-1 p-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 class="text-lg font-bold text-viridis-900">${peak.name}</h3>
-                    <p class="text-sm text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)}</p>
-                  </div>
-                  <div class="text-right shrink-0"><p class="text-3xl font-extrabold" style="color:${color}">${pct}%</p><p class="text-[11px] text-slate-400">above cloud</p></div>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span class="rounded-lg bg-viridis-50/30 px-2 py-1 font-medium text-viridis-800 ring-1 ring-viridis-100">${pct > 0 ? strengthLabel(peak.inversion_strength) : 'No deck signal'}</span>
-                  <span class="rounded-lg bg-viridis-900/5 px-2 py-1 text-slate-600">Confidence: ${peak.confidence}</span>
-                  ${isBest ? '<span class="rounded-lg bg-viridis-100/50 px-2 py-1 font-medium text-viridis-900">Best in view</span>' : ''}
-                </div>
-              </div>
-            </div>`;
-        } else {
-          card.innerHTML = `
-            <div class="flex items-center gap-4 p-4 ${pct < 20 && !searching ? 'opacity-80' : ''}">
-              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-bold" style="background:${color}22;color:${color}">${searching ? '◎' : rank}</span>
-              <div class="flex-1 min-w-0">
-                <h3 class="font-semibold text-viridis-900 truncate">${peak.name}</h3>
-                <p class="text-xs text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)}${searching ? '' : ` · ${strengthLabel(peak.inversion_strength)}`}</p>
-              </div>
-              <div class="text-right shrink-0">${searching
-                ? '<p class="text-xs font-medium text-viridis-700">Fly to</p>'
-                : `<p class="text-2xl font-bold" style="color:${color}">${pct}%</p>`}</div>
-            </div>`;
-        }
+        card.innerHTML = `
+          <div class="flex items-center gap-4 p-4 ${pct < 20 && !searching ? 'opacity-80' : ''}">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-bold" style="background:${color}22;color:${color}">${searching ? '◎' : rank}</span>
+            <div class="flex-1 min-w-0">
+              <h3 class="font-semibold text-viridis-900 truncate">${peak.name}</h3>
+              <p class="text-xs text-slate-500">${peak.state} · ${formatElevationFt(peak.elevation_m)}${searching ? '' : ` · ${strengthLabel(peak.inversion_strength)}`}${isBest ? ' · Best in view' : ''}</p>
+            </div>
+            <div class="text-right shrink-0">${searching
+              ? '<p class="text-xs font-medium text-viridis-700">Fly to</p>'
+              : `<p class="text-2xl font-bold" style="color:${color}">${pct}%</p>`}</div>
+          </div>`;
 
         card.addEventListener('mouseenter', () => {
           document.querySelectorAll('.rank-card').forEach((node) => node.classList.remove('active'));

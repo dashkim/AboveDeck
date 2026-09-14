@@ -47,7 +47,7 @@ PNW_METAR_STATIONS: dict[str, tuple[float, float]] = {
 }
 
 DEFINITION_VERSION = "inv-def-v1"
-DEFAULT_MODEL_VERSION = "rules-v0"
+DEFAULT_MODEL_VERSION = "rules-v1"
 ML_MODEL_VERSION = "inv-clf-v1"
 
 

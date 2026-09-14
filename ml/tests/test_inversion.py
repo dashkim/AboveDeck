@@ -1,6 +1,10 @@
 """Tests for inversion definition."""
 
-from ml.inversion.cloud_base import estimate_cloud_base_m, lifting_condensation_level_m
+from ml.inversion.cloud_base import (
+    estimate_cloud_base_m,
+    lifting_condensation_level_m,
+    surface_elevation_for_lcl,
+)
 from ml.inversion.definition import assess_inversion
 from ml.inversion.scoring import above_cloud_probability, inversion_strength_from_prob
 
@@ -48,3 +52,31 @@ def test_estimate_cloud_base_prefers_observation():
         observed_ceiling_m=900.0,
     )
     assert obs == 900.0
+
+
+def test_assess_inversion_lcl_uses_surface_not_summit():
+    """Humid LCL at summit used to cap prob near 0.48; surface anchor allows high scores."""
+    capped_style = assess_inversion(
+        elevation_m=2500.0,
+        temp_c=5.0,
+        dewpoint_c=4.9,
+        rh=95.0,
+        wind_ms=2.0,
+        cloud_cover_low=80.0,
+        forecast_elevation_m=2500.0,
+        prominence_m=None,
+    )
+    # Default valley drop when forecast is on the summit → still above deck.
+    assert capped_style.above_cloud_prob > 0.85
+
+    with_grid = assess_inversion(
+        elevation_m=2500.0,
+        temp_c=5.0,
+        dewpoint_c=4.9,
+        rh=95.0,
+        wind_ms=2.0,
+        cloud_cover_low=80.0,
+        forecast_elevation_m=1000.0,
+    )
+    assert with_grid.above_cloud_prob > 0.95
+    assert surface_elevation_for_lcl(2500.0, forecast_elevation_m=1000.0) == 1000.0

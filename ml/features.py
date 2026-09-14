@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ml.inversion.cloud_base import dewpoint_depression, estimate_cloud_base_m
+from ml.inversion.cloud_base import (
+    dewpoint_depression,
+    estimate_cloud_base_m,
+    surface_elevation_for_lcl,
+)
 from ml.inversion.definition import assess_inversion
 
 
@@ -30,14 +34,20 @@ def build_features(
     lead_hours: float | None = None,
     observed_ceiling_m: float | None = None,
     has_observation: bool = False,
+    forecast_elevation_m: float | None = None,
 ) -> dict[str, Any]:
     if valid_at.tzinfo is None:
         valid_at = valid_at.replace(tzinfo=timezone.utc)
 
+    surface_m = surface_elevation_for_lcl(
+        elevation_m,
+        forecast_elevation_m=forecast_elevation_m,
+        prominence_m=prominence_m,
+    )
     cloud_base_m = estimate_cloud_base_m(
         temp_c=temp_c,
         dewpoint_c=dewpoint_c,
-        elevation_m=elevation_m,
+        elevation_m=surface_m,
         observed_ceiling_m=observed_ceiling_m,
         cloud_cover_low=cloud_cover_low,
     )
@@ -52,6 +62,8 @@ def build_features(
         observed_ceiling_m=observed_ceiling_m,
         lead_hours=lead_hours,
         has_observation=has_observation,
+        forecast_elevation_m=forecast_elevation_m,
+        prominence_m=prominence_m,
     )
 
     valley_delta = None

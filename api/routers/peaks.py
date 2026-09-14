@@ -19,7 +19,7 @@ from services.predictions import (
     fetch_peak_predictions_for_date,
     prediction_to_summary,
 )
-from services.weather_forecast import PeakLocation, refresh_peak_forecasts
+from services.weather_forecast import MODEL_VERSION as LIVE_RULES_VERSION, PeakLocation, refresh_peak_forecasts
 
 router = APIRouter(prefix="/peaks", tags=["peaks"])
 
@@ -27,10 +27,7 @@ router = APIRouter(prefix="/peaks", tags=["peaks"])
 def _needs_forecast_refresh(predictions: dict) -> bool:
     if not predictions:
         return True
-    return all(
-        pred.model_version != "rules-v0" and (pred.above_cloud_prob or 0) == 0.0
-        for pred in predictions.values()
-    )
+    return all(pred.model_version != LIVE_RULES_VERSION for pred in predictions.values())
 
 
 def parse_bbox(bbox: str) -> tuple[float, float, float, float]:
@@ -60,6 +57,7 @@ async def list_peaks(
             func.ST_Y(Peak.geom).label("lat"),
             func.ST_X(Peak.geom).label("lon"),
             Peak.elevation_m,
+            Peak.prominence_m,
             Peak.state,
         )
         .where(Peak.geom.ST_Intersects(envelope))
@@ -78,6 +76,7 @@ async def list_peaks(
                 lat=float(row.lat),
                 lon=float(row.lon),
                 elevation_m=float(row.elevation_m or 0),
+                prominence_m=float(row.prominence_m) if row.prominence_m is not None else None,
             )
             for row in rows
             if row.elevation_m is not None
@@ -154,6 +153,7 @@ async def get_peak(
         func.ST_Y(Peak.geom).label("lat"),
         func.ST_X(Peak.geom).label("lon"),
         Peak.elevation_m,
+        Peak.prominence_m,
         Peak.state,
     ).where(Peak.id == peak_id)
     result = await session.execute(stmt)
@@ -172,6 +172,7 @@ async def get_peak(
                         lat=float(row.lat),
                         lon=float(row.lon),
                         elevation_m=float(row.elevation_m),
+                        prominence_m=float(row.prominence_m) if row.prominence_m is not None else None,
                     )
                 ],
                 date,
