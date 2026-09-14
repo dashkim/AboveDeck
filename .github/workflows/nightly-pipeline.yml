@@ -1,9 +1,12 @@
 name: Nightly Pipeline
 
-# Do not run on a schedule until ingest writes to a local DB.
-# This job still points at Neon and would refill the 512 MB free-tier cap.
+# Limited free-tier run: top peaks only, rules scoring, then prune weather.
+# Re-enable a cron once Neon storage / paid tier can hold fuller ingest.
 on:
   workflow_dispatch:
+  schedule:
+    # 06:00 UTC daily (~11pm/10pm PT)
+    - cron: "0 6 * * *"
 
 jobs:
   pipeline:
@@ -24,39 +27,11 @@ jobs:
         run: python scripts/run_migrations.py
 
       - name: Ingest weather forecasts
-        run: python ml/pipeline/ingest.py
+        # Cap peaks + horizon so Neon free tier stays under storage limits.
+        run: python ml/pipeline/ingest.py --limit 600 --forecast-days 3
 
-      - name: Generate labels from METAR
-        run: python ml/pipeline/label.py --days 7
-
-      - name: Score peaks
-        run: python ml/pipeline/score.py
+      - name: Score peaks (rules-v0)
+        run: python ml/pipeline/score.py --limit 600
 
       - name: Prune old data
-        run: python ml/pipeline/prune.py --days 14
-
-  train:
-    runs-on: ubuntu-latest
-    needs: pipeline
-    if: github.event_name == 'schedule' && (github.run_number % 7 == 0)
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install ML dependencies
-        run: pip install -r ml/requirements.txt
-
-      - name: Train model
-        run: python ml/pipeline/train.py --min-samples 50
-
-      - name: Upload model artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: inversion-model
-          path: ml/models/artifacts/
-          if-no-files-found: ignore
+        run: python ml/pipeline/prune.py --horizon-days 3

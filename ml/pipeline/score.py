@@ -23,7 +23,14 @@ from ml.inversion.scoring import inversion_strength_from_prob
 DB_BATCH_SIZE = 5000
 
 
-def load_model():
+def load_model(*, use_ml: bool = False):
+    """Load LightGBM artifact only when explicitly requested.
+
+    The checked-in inv-clf-v1 artifact was trained with leaky labels (ROC 1.0)
+    and scored every peak to 0.0 in production. Rules-v0 is the MVP default.
+    """
+    if not use_ml:
+        return None, DEFAULT_MODEL_VERSION
     settings = get_settings()
     model_path = Path(settings.models_dir) / f"{ML_MODEL_VERSION}.joblib"
     if not model_path.exists():
@@ -65,8 +72,8 @@ def load_latest_weather_bulk() -> dict[int, list[dict]]:
     return by_peak
 
 
-def run(*, limit: int | None = None) -> int:
-    model, model_version = load_model()
+def run(*, limit: int | None = None, use_ml: bool = False) -> int:
+    model, model_version = load_model(use_ml=use_ml)
     peaks = load_peaks_with_weather(limit=limit)
     if not peaks:
         print("No peaks with weather data found.")
@@ -151,8 +158,13 @@ def run(*, limit: int | None = None) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Score peaks from latest weather")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--use-ml",
+        action="store_true",
+        help="Use LightGBM artifact if present (default: rules-v0 only)",
+    )
     args = parser.parse_args()
-    run(limit=args.limit)
+    run(limit=args.limit, use_ml=args.use_ml)
 
 
 if __name__ == "__main__":

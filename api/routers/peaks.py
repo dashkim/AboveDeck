@@ -19,8 +19,18 @@ from services.predictions import (
     fetch_peak_predictions_for_date,
     prediction_to_summary,
 )
+from services.weather_forecast import PeakLocation, refresh_peak_forecasts
 
 router = APIRouter(prefix="/peaks", tags=["peaks"])
+
+
+def _needs_forecast_refresh(predictions: dict) -> bool:
+    if not predictions:
+        return True
+    return all(
+        pred.model_version != "rules-v0" and (pred.above_cloud_prob or 0) == 0.0
+        for pred in predictions.values()
+    )
 
 
 def parse_bbox(bbox: str) -> tuple[float, float, float, float]:
@@ -60,6 +70,26 @@ async def list_peaks(
     rows = result.all()
     peak_ids = [row.id for row in rows]
     predictions = await fetch_peak_predictions_for_date(session, peak_ids, date, hour=hour)
+
+    if rows and _needs_forecast_refresh(predictions):
+        locations = [
+            PeakLocation(
+                id=row.id,
+                lat=float(row.lat),
+                lon=float(row.lon),
+                elevation_m=float(row.elevation_m or 0),
+            )
+            for row in rows
+            if row.elevation_m is not None
+        ]
+        try:
+            await refresh_peak_forecasts(session, locations, date)
+            predictions = await fetch_peak_predictions_for_date(
+                session, peak_ids, date, hour=hour
+            )
+        except Exception:
+            # Serve peaks without live scores if Open-Meteo is unavailable.
+            pass
 
     peaks = [
         prediction_to_summary(
@@ -123,6 +153,24 @@ async def get_peak(
         raise HTTPException(status_code=404, detail="Peak not found")
 
     predictions = await fetch_peak_predictions_for_date(session, [peak_id], date)
+    if _needs_forecast_refresh(predictions) and row.elevation_m is not None:
+        try:
+            await refresh_peak_forecasts(
+                session,
+                [
+                    PeakLocation(
+                        id=row.id,
+                        lat=float(row.lat),
+                        lon=float(row.lon),
+                        elevation_m=float(row.elevation_m),
+                    )
+                ],
+                date,
+            )
+            predictions = await fetch_peak_predictions_for_date(session, [peak_id], date)
+        except Exception:
+            pass
+
     hourly = await fetch_hourly_predictions(session, peak_id, date)
     summary = prediction_to_summary(
         row.id,

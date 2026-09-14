@@ -17,6 +17,21 @@ async def _latest_model_version(
     day_start: datetime,
     day_end: datetime,
 ) -> str | None:
+    # Prefer live rule scores over the legacy all-zero classifier artifact.
+    preferred = await session.execute(
+        select(Prediction.model_version)
+        .where(
+            Prediction.peak_id.in_(peak_ids),
+            Prediction.valid_at >= day_start,
+            Prediction.valid_at <= day_end,
+            Prediction.model_version == "rules-v0",
+        )
+        .limit(1)
+    )
+    version = preferred.scalar_one_or_none()
+    if version:
+        return version
+
     stmt = (
         select(Prediction.model_version)
         .where(

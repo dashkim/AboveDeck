@@ -12,6 +12,8 @@ uvicorn main:app --reload --port 8000
 ```
 
 - `GET /health` — always returns 200; includes DB connectivity and keepalive cron status
+- `GET /peaks?bbox=&date=` — peaks in view with `rules-v0` scores; auto-fetches Open-Meteo when scores are missing
+- `POST /predictions/refresh?bbox=&date=` — force refresh forecasts for peaks in a bbox
 - Data endpoints return 503 until `DATABASE_URL` is set
 
 Point the map at a local API by editing [`assets/config.js`](../assets/config.js) (`apiBaseUrl: 'http://localhost:8000'`). Serve `index.html` over http (Live Server), not `file://`.

@@ -6,9 +6,14 @@ import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+# Repo-root .env, then api/.env (local Neon URL usually lives there).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_REPO_ROOT / ".env")
+load_dotenv(_REPO_ROOT / "api" / ".env", override=False)
 
 
 HOURLY_VARIABLES = [
