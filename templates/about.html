@@ -153,6 +153,64 @@
       </figure>
     </section>
 
+    <!-- How the live scores work -->
+    <section class="mt-14 border-t border-viridis-600/10 pt-10">
+      <div class="max-w-3xl space-y-3">
+        <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600">Transparency</p>
+        <h2 class="text-lg font-semibold text-viridis-900">How the scores work today</h2>
+        <p class="text-sm leading-relaxed text-slate-600">
+          The live Pacific Northwest map is not a black box. Each peak gets a short-range weather forecast, we estimate how high the low cloud deck sits, then we ask a simple question:
+          <span class="font-medium text-viridis-800">is this summit above that deck?</span>
+          The answer is a probability and a plain label—none, possible, strong, or excellent.
+        </p>
+      </div>
+
+      <ol class="mt-8 max-w-3xl space-y-6">
+        <li class="grid gap-1 sm:grid-cols-[7rem_1fr] sm:gap-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600 sm:pt-0.5">1. Peaks</p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            We start from a curated list of Oregon and Washington summits with known elevations. Higher peaks get priority when we have to stay within forecast API limits.
+          </p>
+        </li>
+        <li class="grid gap-1 sm:grid-cols-[7rem_1fr] sm:gap-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600 sm:pt-0.5">2. Forecast</p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            A nightly job pulls hourly weather from
+            <span class="font-medium text-viridis-800">Open-Meteo</span>
+            for each peak—temperature, dew point, humidity, wind, pressure, and low/mid cloud cover—looking a few days ahead. The map can also refresh forecasts on demand when scores are missing.
+          </p>
+        </li>
+        <li class="grid gap-1 sm:grid-cols-[7rem_1fr] sm:gap-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600 sm:pt-0.5">3. Cloud deck</p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            From the temperature–dew point spread we estimate the lifting condensation level: roughly where rising air would start to form cloud. That height is anchored at valley or model terrain—not the summit itself—so we don’t pretend the forecast is measured on the peak. If low cloud cover looks sparse, we skip a deck estimate rather than invent one.
+          </p>
+        </li>
+        <li class="grid gap-1 sm:grid-cols-[7rem_1fr] sm:gap-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600 sm:pt-0.5">4. Score</p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            We compare peak elevation to that estimated deck. The farther above the clouds a summit sits, the higher the probability. A soft margin (~150&nbsp;m) turns “barely above” vs “well above” into a smooth chance instead of a hard yes/no. Labels map from that probability: none below ~35%, possible, strong above ~65%, excellent above ~85%.
+          </p>
+        </li>
+        <li class="grid gap-1 sm:grid-cols-[7rem_1fr] sm:gap-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-viridis-600 sm:pt-0.5">5. Map</p>
+          <p class="text-sm leading-relaxed text-slate-600">
+            Stored scores show up for the date you pick. Peaks rank by above-cloud chance so you can scan where the deck is most likely to sit below you.
+          </p>
+        </li>
+      </ol>
+
+      <div class="mt-8 max-w-3xl space-y-3">
+        <h3 class="text-base font-semibold text-viridis-900">What this is — and isn’t</h3>
+        <p class="text-sm leading-relaxed text-slate-600">
+          Today’s engine is an explicit rule set (<span class="font-medium text-viridis-800">rules-v1</span>): elevation vs estimated cloud base, driven by public forecast fields. Airport weather (METAR) and satellite fog/low-cloud imagery (GOES) are in the toolbox for training and labels, but they are not yet the live map’s primary inputs. A checked-in machine-learning classifier stays off until it’s retrained properly—we’d rather show an explainable rule score than a opaque model we’re not ready to trust.
+        </p>
+        <p class="text-sm leading-relaxed text-slate-600">
+          Mountain weather still shifts by a few hundred feet and a couple of hours. Treat the map as a planning aid for where to look, not a guarantee you’ll stand in the sun.
+        </p>
+      </div>
+    </section>
+
     <footer class="mt-12 border-t border-viridis-600/10 pt-4 text-xs text-slate-400">
       <a href="status.html" class="hover:text-viridis-700 hover:underline">System status</a>
     </footer>
