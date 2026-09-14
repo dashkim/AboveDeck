@@ -100,13 +100,58 @@
         <p data-meta class="mt-4 text-[11px] text-slate-400">Last ping —</p>
       </article>
 
-      <article id="widget-pipeline" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm opacity-90">
-        <div class="flex items-start justify-between gap-3">
-          <h2 class="font-semibold text-viridis-900">Nightly Pipeline</h2>
-          <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Configured</span>
+      <article id="widget-pipeline" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-3">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="font-semibold text-viridis-900">Nightly Pipeline / Forecast Cache</h2>
+            <p class="mt-1 text-sm text-slate-600">GitHub Actions cron plus on-demand override</p>
+          </div>
+          <span id="pipeline-pill" class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Configured</span>
         </div>
-        <p class="mt-3 text-sm text-slate-600">GitHub Actions cron — weather ingest and scoring</p>
-        <p class="mt-4 text-[11px] text-slate-400">.github/workflows/nightly-pipeline.yml</p>
+        <p class="mt-3 text-sm text-slate-600">
+          Prefills <code class="rounded bg-slate-100 px-1">predictions</code> overnight so the map loads from Neon.
+          Use the override below to score top peaks now and optionally dispatch the nightly workflow.
+        </p>
+        <form id="forecast-cache-form" class="mt-4 flex flex-col gap-3 rounded-xl border border-viridis-600/15 bg-[#f8faf8] p-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <label class="block min-w-[10rem] flex-1 text-xs font-medium text-slate-600">
+            Override password
+            <input
+              id="override-password"
+              type="password"
+              autocomplete="off"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-viridis-500 focus:outline-none focus:ring-1 focus:ring-viridis-500"
+              placeholder="••••"
+            />
+          </label>
+          <label class="block w-28 text-xs font-medium text-slate-600">
+            Peak limit
+            <input
+              id="override-limit"
+              type="number"
+              min="1"
+              max="500"
+              value="200"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-viridis-500 focus:outline-none focus:ring-1 focus:ring-viridis-500"
+            />
+          </label>
+          <label class="flex items-center gap-2 pb-2 text-xs font-medium text-slate-600">
+            <input id="override-refresh-now" type="checkbox" checked class="rounded border-slate-300 text-viridis-600 focus:ring-viridis-500" />
+            Score now
+          </label>
+          <label class="flex items-center gap-2 pb-2 text-xs font-medium text-slate-600">
+            <input id="override-trigger-nightly" type="checkbox" checked class="rounded border-slate-300 text-viridis-600 focus:ring-viridis-500" />
+            Dispatch nightly
+          </label>
+          <button
+            id="override-run-btn"
+            type="submit"
+            class="rounded-lg bg-viridis-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-viridis-800 disabled:opacity-60"
+          >
+            Run forecast cache
+          </button>
+        </form>
+        <p id="override-result" class="mt-3 text-sm text-slate-500">Enter the override password to run an on-demand cache.</p>
+        <p class="mt-2 text-[11px] text-slate-400">.github/workflows/nightly-pipeline.yml · POST /admin/run-forecast-cache</p>
       </article>
 
       <article id="widget-weather" class="status-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm opacity-90">
@@ -314,6 +359,58 @@
       }
     }
 
+    async function runForecastCache(event) {
+      event.preventDefault();
+      const apiBase = window.ABOVEDECK_CONFIG?.apiBaseUrl;
+      const resultEl = document.getElementById('override-result');
+      const btn = document.getElementById('override-run-btn');
+      const pill = document.getElementById('pipeline-pill');
+      const password = document.getElementById('override-password').value;
+      if (!apiBase) {
+        resultEl.textContent = 'Missing apiBaseUrl in assets/config.js';
+        return;
+      }
+      if (!password) {
+        resultEl.textContent = 'Enter the override password.';
+        return;
+      }
+
+      btn.disabled = true;
+      pill.className = PILL.loading;
+      pill.textContent = 'Running…';
+      resultEl.textContent = 'Starting forecast cache — this can take a few minutes…';
+
+      try {
+        const response = await fetch(`${apiBase}/admin/run-forecast-cache`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password,
+            limit: Number(document.getElementById('override-limit').value) || 200,
+            forecast_days: 3,
+            refresh_now: document.getElementById('override-refresh-now').checked,
+            trigger_nightly: document.getElementById('override-trigger-nightly').checked,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          pill.className = PILL.offline;
+          pill.textContent = 'Failed';
+          resultEl.textContent = payload.detail || `Request failed (${response.status})`;
+          return;
+        }
+        pill.className = PILL.online;
+        pill.textContent = 'Updated';
+        resultEl.textContent = payload.message || 'Forecast cache finished.';
+      } catch (err) {
+        pill.className = PILL.offline;
+        pill.textContent = 'Failed';
+        resultEl.textContent = err.message || 'Request failed';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function refreshAll() {
       const btn = document.getElementById('refresh-btn');
       btn.disabled = true;
@@ -340,6 +437,7 @@
     }
 
     document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+    document.getElementById('forecast-cache-form').addEventListener('submit', runForecastCache);
     refreshAll();
     setInterval(refreshAll, 60000);
   </script>

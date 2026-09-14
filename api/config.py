@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     database_url: str | None = None
     cors_origins: str = DEFAULT_CORS_ORIGINS
     cors_origin_regex: str = CORS_ORIGIN_REGEX
+    # Status-page override for on-demand forecast cache / nightly trigger.
+    admin_override_password: str = "smae"
+    github_token: str | None = None
+    github_repo: str = "dashkim/AboveDeck"
+    github_workflow_file: str = "nightly-pipeline.yml"
+    github_ref: str = "main"
 
     @property
     def database_configured(self) -> bool:

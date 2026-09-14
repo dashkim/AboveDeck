@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routers import health, peaks, predictions, smoke
+from routers import admin, health, peaks, predictions, smoke
 
 app = FastAPI(title="AboveDeck API")
 
@@ -19,6 +19,7 @@ app.include_router(health.router)
 app.include_router(peaks.router)
 app.include_router(predictions.router)
 app.include_router(smoke.router)
+app.include_router(admin.router)
 
 
 @app.get("/")
