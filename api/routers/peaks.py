@@ -19,7 +19,7 @@ from services.predictions import (
     fetch_peak_predictions_for_date,
     prediction_to_summary,
 )
-from services.weather_forecast import MODEL_VERSION as LIVE_RULES_VERSION, PeakLocation, refresh_peak_forecasts
+from services.weather_forecast import MODEL_VERSION as LIVE_RULES_VERSION
 
 router = APIRouter(prefix="/peaks", tags=["peaks"])
 
@@ -48,6 +48,11 @@ async def list_peaks(
     _settings=Depends(require_db),
     session: AsyncSession = Depends(get_session),
 ) -> PeakListResponse:
+    """Return peaks in view immediately.
+
+    Weather refresh is intentionally not done here — Open-Meteo can take tens of
+    seconds (or 429). The UI calls POST /predictions/refresh in the background.
+    """
     west, south, east, north = parse_bbox(bbox)
     envelope = gf.ST_MakeEnvelope(west, south, east, north, 4326)
     stmt = (
@@ -68,27 +73,7 @@ async def list_peaks(
     rows = result.all()
     peak_ids = [row.id for row in rows]
     predictions = await fetch_peak_predictions_for_date(session, peak_ids, date, hour=hour)
-
-    if rows and _needs_forecast_refresh(predictions):
-        locations = [
-            PeakLocation(
-                id=row.id,
-                lat=float(row.lat),
-                lon=float(row.lon),
-                elevation_m=float(row.elevation_m or 0),
-                prominence_m=float(row.prominence_m) if row.prominence_m is not None else None,
-            )
-            for row in rows
-            if row.elevation_m is not None
-        ]
-        try:
-            await refresh_peak_forecasts(session, locations, date, max_peaks=40)
-            predictions = await fetch_peak_predictions_for_date(
-                session, peak_ids, date, hour=hour
-            )
-        except Exception:
-            # Serve peaks without live scores if Open-Meteo is unavailable.
-            pass
+    forecasts_ready = bool(predictions) and not _needs_forecast_refresh(predictions)
 
     peaks = [
         prediction_to_summary(
@@ -103,7 +88,12 @@ async def list_peaks(
         for row in rows
     ]
     peaks.sort(key=lambda p: p.above_cloud_prob, reverse=True)
-    return PeakListResponse(peaks=peaks, date=date, bbox=(west, south, east, north))
+    return PeakListResponse(
+        peaks=peaks,
+        date=date,
+        bbox=(west, south, east, north),
+        forecasts_ready=forecasts_ready,
+    )
 
 
 @router.get("/search", response_model=PeakSearchResponse)
@@ -162,25 +152,7 @@ async def get_peak(
         raise HTTPException(status_code=404, detail="Peak not found")
 
     predictions = await fetch_peak_predictions_for_date(session, [peak_id], date)
-    if _needs_forecast_refresh(predictions) and row.elevation_m is not None:
-        try:
-            await refresh_peak_forecasts(
-                session,
-                [
-                    PeakLocation(
-                        id=row.id,
-                        lat=float(row.lat),
-                        lon=float(row.lon),
-                        elevation_m=float(row.elevation_m),
-                        prominence_m=float(row.prominence_m) if row.prominence_m is not None else None,
-                    )
-                ],
-                date,
-            )
-            predictions = await fetch_peak_predictions_for_date(session, [peak_id], date)
-        except Exception:
-            pass
-
+    # Do not block detail on Open-Meteo; list/refresh endpoints handle scoring.
     hourly = await fetch_hourly_predictions(session, peak_id, date)
     summary = prediction_to_summary(
         row.id,

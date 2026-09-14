@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -12,6 +13,8 @@ import requests
 from ml.config import HOURLY_VARIABLES, get_settings
 
 EndpointKind = Literal["forecast", "historical", "single_run"]
+_MAX_ATTEMPTS = 5
+_RETRY_BASE_SECONDS = 1.5
 
 
 @dataclass
@@ -28,6 +31,7 @@ class WeatherSnapshot:
     pressure_hpa: float | None
     source_model: str
     lead_hours: float | None = None
+    forecast_elevation_m: float | None = None
     raw: dict[str, Any] | None = None
 
 
@@ -42,6 +46,29 @@ class OpenMeteoClient:
         if kind == "historical":
             return self.settings.open_meteo_historical_url
         return self.settings.open_meteo_single_run_url
+
+    def _get_json(self, url: str, params: dict[str, Any], *, timeout: float) -> Any:
+        last_error: Exception | None = None
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                response = self.session.get(url, params=params, timeout=timeout)
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    delay = (
+                        float(retry_after)
+                        if retry_after and str(retry_after).isdigit()
+                        else _RETRY_BASE_SECONDS * (2**attempt)
+                    )
+                    time.sleep(delay)
+                    continue
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as exc:
+                last_error = exc
+                time.sleep(_RETRY_BASE_SECONDS * (2**attempt))
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Open-Meteo rate limited after retries")
 
     def fetch_hourly(
         self,
@@ -72,9 +99,7 @@ class OpenMeteoClient:
             params["run"] = run
 
         url = self._base_url(kind)
-        response = self.session.get(url, params=params, timeout=60)
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._get_json(url, params, timeout=60)
         return self._parse_hourly(payload, models=models, fetched_at=fetched_at)
 
     def _parse_hourly(
@@ -90,6 +115,9 @@ class OpenMeteoClient:
             return []
 
         fetched = fetched_at or datetime.now(timezone.utc)
+        forecast_elevation_m = payload.get("elevation")
+        if forecast_elevation_m is not None:
+            forecast_elevation_m = float(forecast_elevation_m)
         snapshots: list[WeatherSnapshot] = []
 
         for idx, time_str in enumerate(times):
@@ -98,7 +126,14 @@ class OpenMeteoClient:
                 valid_at = valid_at.replace(tzinfo=timezone.utc)
             lead_hours = (valid_at - fetched).total_seconds() / 3600.0
 
-            row_slice = {key: (values[idx] if idx < len(values) else None) for key, values in hourly.items() if key != "time"}
+            row_slice = {
+                key: (values[idx] if idx < len(values) else None)
+                for key, values in hourly.items()
+                if key != "time"
+            }
+            raw = {"time": time_str, **{k: v for k, v in row_slice.items()}}
+            if forecast_elevation_m is not None:
+                raw["elevation"] = forecast_elevation_m
             snapshots.append(
                 WeatherSnapshot(
                     valid_at=valid_at,
@@ -113,7 +148,8 @@ class OpenMeteoClient:
                     pressure_hpa=hourly.get("surface_pressure", [None] * len(times))[idx],
                     source_model=models,
                     lead_hours=lead_hours if lead_hours >= 0 else None,
-                    raw={"time": time_str, **{k: v for k, v in row_slice.items()}},
+                    forecast_elevation_m=forecast_elevation_m,
+                    raw=raw,
                 )
             )
         return snapshots
@@ -129,7 +165,11 @@ class OpenMeteoClient:
         if not locations:
             return []
         if len(locations) == 1:
-            return [self.fetch_forecast(locations[0][0], locations[0][1], forecast_days=forecast_days)]
+            return [
+                self.fetch_forecast(
+                    locations[0][0], locations[0][1], forecast_days=forecast_days
+                )
+            ]
 
         fetched = fetched_at or datetime.now(timezone.utc)
         params: dict[str, Any] = {
@@ -140,9 +180,7 @@ class OpenMeteoClient:
             "models": models,
             "forecast_days": forecast_days,
         }
-        response = self.session.get(self._base_url("forecast"), params=params, timeout=120)
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._get_json(self._base_url("forecast"), params, timeout=120)
         if isinstance(payload, list):
             return [self._parse_hourly(item, models=models, fetched_at=fetched) for item in payload]
         return [self._parse_hourly(payload, models=models, fetched_at=fetched)]

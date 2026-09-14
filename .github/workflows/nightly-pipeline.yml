@@ -1,18 +1,22 @@
 name: Nightly Pipeline
 
-# Limited free-tier run: top peaks only, rules scoring, then prune weather.
-# Re-enable a cron once Neon storage / paid tier can hold fuller ingest.
+# Prefill predictions overnight so the map reads from Neon instead of waiting
+# on live Open-Meteo (which rate-limits the Render IP).
+# Caps peaks for Neon free-tier storage; raise once storage allows.
 on:
   workflow_dispatch:
   schedule:
-    # 06:00 UTC daily (~11pm/10pm PT)
-    - cron: "0 6 * * *"
+    # ~midnight Pacific: 07:00 UTC (PDT) / still late evening in PST
+    - cron: "0 7 * * *"
 
 jobs:
   pipeline:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Highest peaks first — covers the summits users actually browse.
+      NIGHTLY_PEAK_LIMIT: "2000"
+      NIGHTLY_FORECAST_DAYS: "3"
     steps:
       - uses: actions/checkout@v4
 
@@ -27,11 +31,15 @@ jobs:
         run: python scripts/run_migrations.py
 
       - name: Ingest weather forecasts
-        # Cap peaks + horizon so Neon free tier stays under storage limits.
-        run: python ml/pipeline/ingest.py --limit 600 --forecast-days 3
+        run: >
+          python ml/pipeline/ingest.py
+          --limit ${{ env.NIGHTLY_PEAK_LIMIT }}
+          --forecast-days ${{ env.NIGHTLY_FORECAST_DAYS }}
+          --reingest-all
+          --api-batch-size 40
 
-      - name: Score peaks (rules-v0)
-        run: python ml/pipeline/score.py --limit 600
+      - name: Score peaks (rules-v1 cache)
+        run: python ml/pipeline/score.py --limit ${{ env.NIGHTLY_PEAK_LIMIT }}
 
-      - name: Prune old data
-        run: python ml/pipeline/prune.py --horizon-days 3
+      - name: Prune weather; keep upcoming predictions
+        run: python ml/pipeline/prune.py --horizon-days ${{ env.NIGHTLY_FORECAST_DAYS }}

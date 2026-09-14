@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-# Only reject forecast terrain when it is essentially at/above the summit.
-_SUMMIT_ELEV_TOLERANCE_M = 25.0
+# Only reject forecast terrain when it is at or above the summit.
+_SUMMIT_ELEV_TOLERANCE_M = 1.0
 _DEFAULT_VALLEY_DROP_M = 600.0
 
 

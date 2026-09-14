@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Overnight AboveDeck pipeline: ingest remaining weather, score with the trained model.
+# Overnight AboveDeck pipeline: ingest weather, score rules-v1 into predictions.
+#
+# Prefills the predictions table so the map loads from Neon instead of waiting
+# on live Open-Meteo from the Render API.
 #
 # Usage:
 #   ./scripts/run_overnight.sh
@@ -8,6 +11,7 @@
 # Optional env:
 #   DATABASE_URL     Neon connection string (or set in api/.env)
 #   FORECAST_DAYS    default 7
+#   PEAK_LIMIT       optional cap (highest peaks first)
 #   SKIP_TRAIN       set to 1 to skip retraining (default: skip; model already exists)
 #   TRAIN            set to 1 to retrain after ingest
 
@@ -44,9 +48,15 @@ export PYTHONUNBUFFERED=1
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 
 FORECAST_DAYS="${FORECAST_DAYS:-7}"
+PEAK_LIMIT="${PEAK_LIMIT:-}"
 SKIP_TRAIN="${SKIP_TRAIN:-1}"
 if [[ "${TRAIN:-0}" == "1" ]]; then
   SKIP_TRAIN=0
+fi
+
+LIMIT_ARGS=()
+if [[ -n "${PEAK_LIMIT}" ]]; then
+  LIMIT_ARGS=(--limit "${PEAK_LIMIT}")
 fi
 
 exec > >(tee -a "$LOG") 2>&1
@@ -75,8 +85,8 @@ step "0/5  Prune Neon (drop weather/labels; keep next 7 days of predictions)"
 step "1/5  Apply migrations"
 "${PYTHON}" scripts/run_migrations.py || fail "migrations"
 
-step "2/5  Ingest Open-Meteo (skips peaks fetched in last 18h)"
-"${PYTHON}" ml/pipeline/ingest.py --forecast-days "${FORECAST_DAYS}" || fail "ingest"
+step "2/5  Ingest Open-Meteo (fresh rules-v1 weather cache)"
+"${PYTHON}" ml/pipeline/ingest.py --forecast-days "${FORECAST_DAYS}" --reingest-all --api-batch-size 40 "${LIMIT_ARGS[@]}" || fail "ingest"
 
 if [[ "${SKIP_TRAIN}" == "0" ]]; then
   step "3/5  Retrain model"
@@ -85,8 +95,8 @@ else
   step "3/5  Skip train (model already at ml/models/artifacts/inv-clf-v1.joblib)"
 fi
 
-step "4/5  Score peaks that have weather"
-"${PYTHON}" ml/pipeline/score.py || fail "score"
+step "4/5  Score peaks (rules-v1 → predictions)"
+"${PYTHON}" ml/pipeline/score.py "${LIMIT_ARGS[@]}" || fail "score"
 
 step "5/5  Prune Neon again (do not leave weather/labels on free-tier storage)"
 "${PYTHON}" ml/pipeline/prune.py --horizon-days 7 || fail "prune"

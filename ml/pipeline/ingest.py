@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Nightly Open-Meteo ingest for all peaks."""
+"""Nightly Open-Meteo ingest for peaks (highest first)."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,8 +18,9 @@ if str(REPO_ROOT) not in sys.path:
 from ml.clients.open_meteo import OpenMeteoClient
 from ml.db import fetch_all, upsert_weather_peak
 
-API_BATCH_SIZE = 50
+API_BATCH_SIZE = 40
 DB_BATCH_SIZE = 500
+BATCH_PAUSE_SECONDS = 0.75
 
 
 def load_peaks(limit: int | None = None, *, skip_ingested: bool = False) -> list[dict]:
@@ -59,6 +61,8 @@ def run(
     total_rows = 0
 
     for start in tqdm(range(0, len(peaks), api_batch_size), desc="Ingesting weather"):
+        if start > 0:
+            time.sleep(BATCH_PAUSE_SECONDS)
         batch = peaks[start : start + api_batch_size]
         locations = [(p["lat"], p["lon"]) for p in batch]
         snapshot_groups = client.fetch_forecast_batch(

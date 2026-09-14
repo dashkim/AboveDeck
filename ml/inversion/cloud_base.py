@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_SUMMIT_ELEV_TOLERANCE_M = 25.0
+_SUMMIT_ELEV_TOLERANCE_M = 1.0
 _DEFAULT_VALLEY_DROP_M = 600.0
 
 

@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -27,7 +29,7 @@ def load_model(*, use_ml: bool = False):
     """Load LightGBM artifact only when explicitly requested.
 
     The checked-in inv-clf-v1 artifact was trained with leaky labels (ROC 1.0)
-    and scored every peak to 0.0 in production. Rules-v0 is the MVP default.
+    and scored every peak to 0.0 in production. Rules-v1 is the serving default.
     """
     if not use_ml:
         return None, DEFAULT_MODEL_VERSION
@@ -72,6 +74,21 @@ def load_latest_weather_bulk() -> dict[int, list[dict]]:
     return by_peak
 
 
+def _forecast_elevation_m(weather_row: dict[str, Any]) -> float | None:
+    raw = weather_row.get("raw_jsonb")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, dict):
+        return None
+    elev = raw.get("elevation")
+    return float(elev) if elev is not None else None
+
+
 def run(*, limit: int | None = None, use_ml: bool = False) -> int:
     model, model_version = load_model(use_ml=use_ml)
     peaks = load_peaks_with_weather(limit=limit)
@@ -103,6 +120,7 @@ def run(*, limit: int | None = None, use_ml: bool = False) -> int:
                 pressure_hpa=w["pressure_hpa"],
                 lead_hours=w["lead_hours"],
                 has_observation=False,
+                forecast_elevation_m=_forecast_elevation_m(w),
             )
             feature_rows.append({col: features.get(col) for col in FEATURE_COLUMNS})
             meta_rows.append(
@@ -125,9 +143,7 @@ def run(*, limit: int | None = None, use_ml: bool = False) -> int:
         probs = model.predict_proba(X)[:, 1]
         version = model_version
     else:
-        probs = X.get("above_cloud_prob_rules", pd.Series([0.0] * len(X)))
-        if model is None:
-            probs = pd.Series([m[5] for m in meta_rows])
+        probs = pd.Series([m[5] for m in meta_rows])
         version = DEFAULT_MODEL_VERSION
 
     all_rows: list[tuple] = []

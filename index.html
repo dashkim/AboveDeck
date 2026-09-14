@@ -337,13 +337,16 @@
     }
 
     const HEALTH_TIMEOUT_MS = 90000;
-    const PEAKS_TIMEOUT_MS = 90000;
+    const PEAKS_TIMEOUT_MS = 45000;
+    const REFRESH_TIMEOUT_MS = 120000;
     const WAKE_ATTEMPTS = 3;
+    let forecastRefreshInFlight = null;
+    let forecastRefreshKey = '';
 
-    function fetchWithTimeout(url, timeoutMs) {
+    function fetchWithTimeout(url, timeoutMs, options = {}) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
-      return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+      return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
     }
 
     function apiUnreachableMessage(error) {
@@ -578,6 +581,50 @@
       }
     }
 
+    async function refreshForecastsInBackground(bbox, fetchKey) {
+      if (forecastRefreshInFlight && forecastRefreshKey === fetchKey) {
+        return forecastRefreshInFlight;
+      }
+      forecastRefreshKey = fetchKey;
+      updatePeakListStatus('Peaks loaded — updating forecasts…');
+      forecastRefreshInFlight = (async () => {
+        try {
+          const refreshUrl = `${apiBaseUrl}/predictions/refresh?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}&limit=40`;
+          const refreshResponse = await fetchWithTimeout(refreshUrl, REFRESH_TIMEOUT_MS, { method: 'POST' });
+          if (!refreshResponse.ok) {
+            updatePeakListStatus(
+              refreshResponse.status === 502
+                ? 'Peaks loaded — weather service is busy. Try Refresh this area in a minute.'
+                : `Peaks loaded — forecast refresh failed (${refreshResponse.status}).`
+            );
+            return;
+          }
+          if (currentBboxKey() !== fetchKey) return;
+          const reload = await fetchWithTimeout(
+            `${apiBaseUrl}/peaks?bbox=${encodeURIComponent(bbox)}&date=${selectedDateIso()}`,
+            PEAKS_TIMEOUT_MS,
+          );
+          if (!reload.ok || currentBboxKey() !== fetchKey) return;
+          const payload = await reload.json();
+          peaksInView = sortPeaksForList(payload.peaks || []);
+          renderPeakList(peaksInView);
+          setPeaksOnMap(peaksInView);
+          if (!payload.forecasts_ready) {
+            updatePeakListStatus('Peaks loaded — forecasts still updating. Try Refresh this area shortly.');
+          }
+        } catch (error) {
+          if (currentBboxKey() === fetchKey) {
+            updatePeakListStatus('Peaks loaded — forecast update timed out. Try Refresh this area.');
+          }
+        } finally {
+          if (forecastRefreshKey === fetchKey) {
+            forecastRefreshInFlight = null;
+          }
+        }
+      })();
+      return forecastRefreshInFlight;
+    }
+
     async function fetchPeaksInView({ force = false, wake = false } = {}) {
       const fetchKey = currentBboxKey();
       if (!force && fetchKey === lastFetchKey) return;
@@ -612,6 +659,10 @@
         peaksInView = sortPeaksForList(payload.peaks || []);
         renderPeakList(peaksInView);
         setPeaksOnMap(peaksInView);
+
+        if (!payload.forecasts_ready) {
+          refreshForecastsInBackground(bbox, fetchKey);
+        }
       } catch (error) {
         lastFetchKey = '';
         updateBestPick([]);
@@ -742,8 +793,18 @@
       }, 350);
     });
 
-    document.getElementById('refresh-area').addEventListener('click', () => {
-      fetchPeaksInView({ force: true, wake: true });
+    document.getElementById('refresh-area').addEventListener('click', async () => {
+      lastFetchKey = '';
+      forecastRefreshKey = '';
+      await fetchPeaksInView({ force: true, wake: true });
+      const bounds = map.getBounds();
+      const bbox = [
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+      ].join(',');
+      await refreshForecastsInBackground(bbox, currentBboxKey());
     });
 
     document.querySelectorAll('.day-pill').forEach((button) => {

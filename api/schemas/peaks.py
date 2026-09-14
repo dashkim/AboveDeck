@@ -35,6 +35,7 @@ class PeakListResponse(BaseModel):
     peaks: list[PeakSummary]
     date: date
     bbox: tuple[float, float, float, float]
+    forecasts_ready: bool = False
 
 
 class PeakDetail(PeakSummary):
